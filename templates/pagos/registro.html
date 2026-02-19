@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Nuevo Registro | Pagos Algodon{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Captura operativa</h5>
+        <small class="text-muted">Registra productores, TC, anticipos, compras y aplicaciones</small>
+    </div>
+    <div class="card-body">
+        <ul class="nav nav-tabs mb-3">
+            <li class="nav-item"><a class="nav-link {% if active_form == 'productor' %}active{% endif %}" href="?form=productor">Productor</a></li>
+            <li class="nav-item"><a class="nav-link {% if active_form == 'tipo_cambio' %}active{% endif %}" href="?form=tipo_cambio">Tipo de cambio</a></li>
+            <li class="nav-item"><a class="nav-link {% if active_form == 'anticipo' %}active{% endif %}" href="?form=anticipo">Anticipo</a></li>
+            <li class="nav-item"><a class="nav-link {% if active_form == 'compra' %}active{% endif %}" href="?form=compra">Compra</a></li>
+            <li class="nav-item"><a class="nav-link {% if active_form == 'aplicacion' %}active{% endif %}" href="?form=aplicacion">Aplicar anticipo</a></li>
+        </ul>
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="form_type" value="{{ active_form }}">
+            {% if active_form == "productor" %}{{ form_instances.productor.as_p }}{% endif %}
+            {% if active_form == "tipo_cambio" %}{{ form_instances.tipo_cambio.as_p }}{% endif %}
+            {% if active_form == "anticipo" %}{{ form_instances.anticipo.as_p }}{% endif %}
+            {% if active_form == "compra" %}{{ form_instances.compra.as_p }}{% endif %}
+            {% if active_form == "aplicacion" %}{{ form_instances.aplicacion.as_p }}{% endif %}
+            <button class="btn btn-primary" type="submit">Guardar</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

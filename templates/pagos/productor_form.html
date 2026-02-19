@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Editar Productor{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Editar productor: {{ productor.nombre }}</h5>
+        <a class="btn btn-outline-secondary btn-sm" href="/productores/">Volver a catalogo</a>
+    </div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button class="btn btn-primary" type="submit">Guardar cambios</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

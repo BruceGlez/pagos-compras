@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Dashboard | Pagos Algodon{% endblock %}
+{% block content %}
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card card-metric">
+            <div class="card-body">
+                <p class="metric-label">Productores activos</p>
+                <h4 class="mb-0">{{ productores_activos }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-metric">
+            <div class="card-body">
+                <p class="metric-label">Anticipos registrados</p>
+                <h4 class="mb-0">${{ anticipos_total|floatformat:2 }}</h4>
+                <small>{{ anticipos_count }} registros</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-metric">
+            <div class="card-body">
+                <p class="metric-label">Libras compradas</p>
+                <h4 class="mb-0">{{ compras_total_libras|floatformat:2 }} lb</h4>
+                <small>{{ compras_count }} compras</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-metric">
+            <div class="card-body">
+                <p class="metric-label">Ultimo TC</p>
+                {% if tc_ultimo %}
+                    <h4 class="mb-0">{{ tc_ultimo.tc|floatformat:4 }}</h4>
+                    <small>{{ tc_ultimo.fecha }}</small>
+                {% else %}
+                    <h6 class="mb-0">Sin capturar</h6>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Compras recientes</h5>
+        <a href="/registro/?form=compra" class="btn btn-sm btn-primary">Registrar compra</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-striped mb-0">
+            <thead>
+                <tr>
+                    <th>Fecha LIQ</th>
+                    <th>Compra</th>
+                    <th>Productor</th>
+                    <th>Libras</th>
+                    <th>Pago</th>
+                    <th>Saldo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for compra in compras_recientes %}
+                <tr>
+                    <td>{{ compra.fecha_liq }}</td>
+                    <td>{{ compra.numero_compra }}</td>
+                    <td>{{ compra.productor.nombre }}</td>
+                    <td>{{ compra.compra_en_libras|floatformat:2 }}</td>
+                    <td>{{ compra.base_pago|floatformat:2 }}</td>
+                    <td>{{ compra.saldo_por_pagar|floatformat:2 }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-4">No hay compras registradas.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

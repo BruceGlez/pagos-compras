@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Flujo Compra {{ compra.numero_compra }}{% endblock %}
+{% block content %}
+<div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Compra {{ compra.numero_compra }} - Flujo</h5>
+        <a class="btn btn-outline-secondary btn-sm" href="/compras/">Volver a compras</a>
+    </div>
+    <div class="card-body">
+        <div class="d-flex justify-content-between">
+            <div>
+                <strong>Productor:</strong> {{ compra.productor.nombre }}<br>
+                <strong>Siguiente paso:</strong> {{ compra.flujo_label }}
+            </div>
+            <div class="text-end">
+                <strong>Progreso</strong><br>
+                {{ compra.flujo_progress }}%
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong>Captura inicial</strong></div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="flow_form" value="flujo1">
+                    {{ forms.flujo1.as_p }}
+                    <button class="btn btn-primary btn-sm" type="submit">Guardar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong>Tipo de cambio</strong></div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="flow_form" value="flujo2">
+                    {{ forms.flujo2.as_p }}
+                    <button class="btn btn-primary btn-sm" type="submit">Guardar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong>Solicitar factura</strong></div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="flow_form" value="solicitar_factura">
+                    {{ forms.solicitar_factura.as_p }}
+                    <button class="btn btn-primary btn-sm" type="submit">Guardar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong>Registrar factura</strong></div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="flow_form" value="registrar_factura">
+                    {{ forms.registrar_factura.as_p }}
+                    <button class="btn btn-primary btn-sm" type="submit">Guardar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong>Retenciones de deudas</strong></div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="flow_form" value="flujo3">
+                    {{ forms.flujo3.as_p }}
+                    <button class="btn btn-primary btn-sm" type="submit">Guardar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong>Pago</strong></div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="flow_form" value="pago">
+                    {{ forms.pago.as_p }}
+                    <button class="btn btn-primary btn-sm" type="submit">Guardar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong>Documentos del expediente</strong></div>
+            <div class="card-body">
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <input type="hidden" name="flow_form" value="documento">
+                    {{ documento_form.as_p }}
+                    <button class="btn btn-primary btn-sm" type="submit">Subir documento</button>
+                </form>
+                <hr>
+                <ul class="list-group list-group-flush">
+                    {% for doc in documentos %}
+                    <li class="list-group-item px-0">
+                        <strong>{{ doc.get_etapa_display }}</strong> - {{ doc.descripcion|default:"Sin descripcion" }}
+                        <a href="{{ doc.archivo.url }}" target="_blank">Ver</a>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item px-0">Sin documentos cargados.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header"><strong>Cierre de expediente</strong></div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="flow_form" value="expediente">
+                    {{ forms.expediente.as_p }}
+                    <button class="btn btn-success btn-sm" type="submit">Guardar cierre</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Compras Operativas{% endblock %}
+{% block content %}
+<div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Vista Operativa de Compras</h5>
+        <a class="btn btn-primary btn-sm" href="/compras/nueva/">Nueva compra</a>
+    </div>
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">{{ filtro_form.q.label_tag }}{{ filtro_form.q }}</div>
+            <div class="col-md-3">{{ filtro_form.productor.label_tag }}{{ filtro_form.productor }}</div>
+            <div class="col-md-2">{{ filtro_form.fecha_desde.label_tag }}{{ filtro_form.fecha_desde }}</div>
+            <div class="col-md-2">{{ filtro_form.fecha_hasta.label_tag }}{{ filtro_form.fecha_hasta }}</div>
+            <div class="col-md-2">{{ filtro_form.estatus_de_pago.label_tag }}{{ filtro_form.estatus_de_pago }}</div>
+            <div class="col-12">
+                <button class="btn btn-success btn-sm" type="submit">Filtrar</button>
+                <a class="btn btn-outline-secondary btn-sm" href="/compras/">Limpiar</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-striped table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Compra</th>
+                    <th>Fecha LIQ</th>
+                    <th>Productor</th>
+                    <th>Factura (quien factura)</th>
+                    <th>UUID FACTURA</th>
+                    <th>Libras</th>
+                    <th>Pago</th>
+                    <th>Saldo</th>
+                    <th>Flujo</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for compra in page_obj %}
+                <tr>
+                    <td>{{ compra.numero_compra }}</td>
+                    <td>{{ compra.fecha_liq }}</td>
+                    <td>{{ compra.productor.nombre }}</td>
+                    <td>{{ compra.factura }}</td>
+                    <td>{{ compra.uuid_factura }}</td>
+                    <td>{{ compra.compra_en_libras|floatformat:2 }}</td>
+                    <td>{{ compra.base_pago|floatformat:2 }}</td>
+                    <td>{{ compra.saldo_por_pagar|floatformat:2 }}</td>
+                    <td>
+                        <div><strong>{{ compra.flujo_label }}</strong></div>
+                        <small>{{ compra.flujo_progress }}%</small>
+                    </td>
+                    <td class="d-flex gap-1">
+                        <a class="btn btn-outline-primary btn-sm" href="/compras/{{ compra.id }}/flujo/?step={{ compra.flujo_codigo }}">{{ compra.flujo_label }}</a>
+                        <a class="btn btn-outline-secondary btn-sm" href="/compras/{{ compra.id }}/editar/">Completa</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="10" class="text-center py-4">No hay compras para mostrar.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+    <div class="card-footer d-flex justify-content-between">
+        <span>Pagina {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+        <div>
+            {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}" class="btn btn-sm btn-outline-secondary">Anterior</a>{% endif %}
+            {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}" class="btn btn-sm btn-outline-secondary">Siguiente</a>{% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

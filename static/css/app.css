@@ -1,0 +1,27 @@
+:root {
+    --brand-900: #0e3b2f;
+    --brand-700: #1b5e4a;
+    --bg-soft: #f2f5f3;
+}
+
+body {
+    background: radial-gradient(circle at top left, #f8fffb 0%, #edf3ef 55%, #e2ece6 100%);
+}
+
+.nav-app {
+    background: linear-gradient(120deg, var(--brand-900), var(--brand-700));
+}
+
+.card {
+    border: 0;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.card-metric {
+    background: var(--bg-soft);
+}
+
+.metric-label {
+    color: #4f5d57;
+    margin-bottom: 0.35rem;
+}
