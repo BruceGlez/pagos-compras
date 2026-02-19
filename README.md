@@ -56,3 +56,31 @@ DJANGO_SECRET_KEY=change-me
 DJANGO_DEBUG=1
 DJANGO_ALLOWED_HOSTS=*
 ```
+
+## TC automatico con Banxico
+
+Configura:
+
+```env
+BANXICO_TOKEN=tu_token_banxico
+BANXICO_SERIE_ID=SF60653
+BANXICO_TC_OBJETIVO=publicacion_dof
+```
+
+Series utiles:
+- `SF60653`: Fecha de liquidacion (publicacion DOF)
+- `SF43718`: Fecha de determinacion (FIX)
+
+Ejecucion manual:
+
+```powershell
+python manage.py actualizar_tc_banxico --days 7
+```
+
+Programacion diaria (ejemplo Windows Task Scheduler):
+
+```powershell
+cd c:\Users\bruce\vscode_projects\pagos-compras
+.\.venv\Scripts\python manage.py actualizar_tc_banxico --days 2
+```
+

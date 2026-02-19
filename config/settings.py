@@ -110,3 +110,7 @@ STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+BANXICO_TOKEN = os.getenv("BANXICO_TOKEN", "")
+BANXICO_SERIE_ID = os.getenv("BANXICO_SERIE_ID", "SF60653")
+BANXICO_TC_OBJETIVO = os.getenv("BANXICO_TC_OBJETIVO", "publicacion_dof")

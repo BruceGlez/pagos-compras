@@ -153,6 +153,7 @@ def compra_edit_view(request, compra_id):
 
 def compra_flujo_view(request, compra_id):
     compra = get_object_or_404(Compra, pk=compra_id)
+    ui_pending_step = compra.flujo_codigo if compra.flujo_codigo != "completo" else "expediente"
     form_map = {
         "flujo1": (CompraFlujo1Form, "Flujo 1 actualizado."),
         "solicitar_factura": (CompraSolicitarFacturaForm, "Solicitud de factura actualizada."),
@@ -176,7 +177,11 @@ def compra_flujo_view(request, compra_id):
                 doc.compra = compra
                 doc.save()
                 messages.success(request, "Documento cargado al expediente.")
-                return redirect("compra_flujo", compra_id=compra.id)
+                compra.refresh_from_db()
+                next_step = (
+                    compra.flujo_codigo if compra.flujo_codigo != "completo" else "expediente"
+                )
+                return redirect(f"/compras/{compra.id}/flujo/?step={next_step}")
             messages.error(request, "Error al cargar documento.")
         elif form_name in form_map:
             form_cls, msg = form_map[form_name]
@@ -184,10 +189,63 @@ def compra_flujo_view(request, compra_id):
             if forms[form_name].is_valid():
                 forms[form_name].save()
                 messages.success(request, msg)
-                return redirect("compra_flujo", compra_id=compra.id)
+                compra.refresh_from_db()
+                next_step = (
+                    compra.flujo_codigo if compra.flujo_codigo != "completo" else "expediente"
+                )
+                return redirect(f"/compras/{compra.id}/flujo/?step={next_step}")
             messages.error(request, "Hay errores en el formulario.")
 
-    current_step = request.GET.get("step") or compra.flujo_codigo
+    step_to_form = {
+        "captura": "flujo1",
+        "solicitar_factura": "solicitar_factura",
+        "registrar_factura": "registrar_factura",
+        "pago": "pago",
+        "expediente": "expediente",
+        "tc": "flujo2",
+        "deudas": "flujo3",
+    }
+    current_step = request.GET.get("step") or ui_pending_step
+    step_items = [
+        ("captura", "Captura"),
+        ("solicitar_factura", "Solicitar factura"),
+        ("registrar_factura", "Registrar factura"),
+        ("pago", "Pago"),
+        ("expediente", "Expediente"),
+    ]
+    extra_items = [("tc", "TC"), ("deudas", "Deudas")]
+    main_order = [code for code, _ in step_items]
+    pending_idx = (
+        main_order.index(ui_pending_step)
+        if ui_pending_step in main_order
+        else len(main_order) - 1
+    )
+
+    unlocked_main = set(main_order[: pending_idx + 1])
+    unlocked_extra = (
+        {code for code, _ in extra_items} if compra.captura_completa else set()
+    )
+    unlocked_steps = unlocked_main | unlocked_extra
+    if compra.flujo_codigo == "completo":
+        unlocked_steps = set(main_order) | set(code for code, _ in extra_items)
+
+    if request.GET.get("step") and current_step not in unlocked_steps:
+        messages.warning(request, "Ese paso aun no esta disponible. Se muestra el paso pendiente.")
+        return redirect(f"/compras/{compra.id}/flujo/?step={ui_pending_step}")
+
+    if current_step not in unlocked_steps:
+        current_step = ui_pending_step
+
+    active_form_key = step_to_form.get(current_step, step_to_form.get(ui_pending_step))
+    active_form = forms.get(active_form_key) if active_form_key else None
+    step_items_ui = [
+        {"code": code, "label": label, "unlocked": code in unlocked_steps}
+        for code, label in step_items
+    ]
+    extra_items_ui = [
+        {"code": code, "label": label, "unlocked": code in unlocked_steps}
+        for code, label in extra_items
+    ]
     return render(
         request,
         "pagos/compra_flujo.html",
@@ -196,6 +254,10 @@ def compra_flujo_view(request, compra_id):
             "forms": forms,
             "documento_form": documento_form,
             "current_step": current_step,
+            "active_form_key": active_form_key,
+            "active_form": active_form,
+            "step_items": step_items_ui,
+            "extra_items": extra_items_ui,
             "documentos": compra.documentos.all()[:30],
         },
     )
