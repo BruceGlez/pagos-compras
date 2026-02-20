@@ -153,6 +153,16 @@ class Compra(TimestampedModel):
     productor = models.ForeignKey(
         Productor, on_delete=models.PROTECT, related_name="compras"
     )
+    parent_compra = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        related_name="divisiones",
+        null=True,
+        blank=True,
+    )
+    porcentaje_division = models.DecimalField(
+        max_digits=6, decimal_places=2, null=True, blank=True
+    )
     uuid_factura = models.CharField(max_length=80, blank=True)
     factura = models.CharField(max_length=200, blank=True)
     pacas = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
@@ -203,6 +213,9 @@ class Compra(TimestampedModel):
     uuid_ppd = models.CharField(max_length=80, blank=True)
     solicitud_factura_enviada = models.BooleanField(default=False)
     fecha_solicitud_factura = models.DateField(null=True, blank=True)
+    anticipos_revisados = models.BooleanField(default=False)
+    deudas_revisadas = models.BooleanField(default=False)
+    division_revisada = models.BooleanField(default=False)
     expediente_completo = models.BooleanField(default=False)
 
     class Meta:
@@ -255,6 +268,28 @@ class Compra(TimestampedModel):
                 self.total_en_pesos = self.pago
         return super().save(*args, **kwargs)
 
+    def clean(self):
+        super().clean()
+        if self.parent_compra_id:
+            if self.parent_compra.parent_compra_id:
+                raise ValidationError("No se permite dividir una compra ya dividida.")
+            if self.parent_compra_id == self.id:
+                raise ValidationError("La compra no puede ser su propio padre.")
+            if self.porcentaje_division is None or self.porcentaje_division <= 0:
+                raise ValidationError("La division debe tener un porcentaje mayor a 0.")
+            siblings_total = (
+                self.parent_compra.divisiones.exclude(pk=self.pk).aggregate(
+                    total=Sum("porcentaje_division")
+                )["total"]
+                or Decimal("0")
+            )
+            if siblings_total + self.porcentaje_division > Decimal("100"):
+                raise ValidationError("La suma de divisiones no puede exceder 100%.")
+        elif self.porcentaje_division:
+            raise ValidationError(
+                "Solo las compras divididas pueden tener porcentaje de division."
+            )
+
     @property
     def captura_completa(self):
         return bool(
@@ -264,6 +299,33 @@ class Compra(TimestampedModel):
             and self.pacas is not None
             and self.compra_en_libras is not None
         )
+
+    @property
+    def es_division(self):
+        return self.parent_compra_id is not None
+
+    @property
+    def total_porcentaje_dividido(self):
+        if self.es_division:
+            return Decimal("0")
+        value = self.divisiones.aggregate(total=Sum("porcentaje_division"))["total"]
+        return value or Decimal("0")
+
+    @property
+    def porcentaje_disponible_division(self):
+        return Decimal("100") - self.total_porcentaje_dividido
+
+    @property
+    def total_monto_dividido(self):
+        if self.es_division:
+            return Decimal("0")
+        base = self.compra_en_libras or Decimal("0")
+        return (base * self.total_porcentaje_dividido) / Decimal("100")
+
+    @property
+    def monto_disponible_division(self):
+        base = self.compra_en_libras or Decimal("0")
+        return base - self.total_monto_dividido
 
     @property
     def factura_registrada(self):
@@ -279,26 +341,33 @@ class Compra(TimestampedModel):
 
     @property
     def flujo_codigo(self):
+        if self.es_division:
+            if not self.factura_registrada:
+                return "facturas"
+            if not self.pago_registrado:
+                return "pago"
+            return "completo"
+
         if not self.captura_completa:
             return "captura"
-        if not self.solicitud_factura_enviada:
-            return "solicitar_factura"
+        if not self.anticipos_revisados:
+            return "anticipos"
+        if not self.deudas_revisadas:
+            return "deudas"
         if not self.factura_registrada:
-            return "registrar_factura"
+            return "facturas"
         if not self.pago_registrado:
             return "pago"
-        if not self.expediente_completo:
-            return "expediente"
         return "completo"
 
     @property
     def flujo_label(self):
         labels = {
             "captura": "Completar captura",
-            "solicitar_factura": "Solicitar factura",
-            "registrar_factura": "Registrar factura",
+            "anticipos": "Revisar anticipos",
+            "deudas": "Revisar deudas",
+            "facturas": "Solicitar/registrar facturas",
             "pago": "Registrar pago",
-            "expediente": "Completar expediente",
             "completo": "Completado",
         }
         return labels[self.flujo_codigo]
@@ -307,10 +376,10 @@ class Compra(TimestampedModel):
     def flujo_progress(self):
         steps = {
             "captura": 20,
-            "solicitar_factura": 40,
-            "registrar_factura": 60,
-            "pago": 80,
-            "expediente": 90,
+            "anticipos": 40,
+            "deudas": 60,
+            "facturas": 80,
+            "pago": 95,
             "completo": 100,
         }
         return steps[self.flujo_codigo]

@@ -206,6 +206,16 @@ class CompraFlujo2Form(BootstrapFormMixin, forms.ModelForm):
         }
 
 
+class CompraFlujoAnticiposForm(BootstrapFormMixin, forms.ModelForm):
+    class Meta:
+        model = Compra
+        fields = ["anticipo", "anticipos_revisados"]
+        labels = {
+            "anticipo": "Anticipo aplicado en compra",
+            "anticipos_revisados": "Anticipos revisados",
+        }
+
+
 class CompraFlujo3Form(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Compra
@@ -213,11 +223,13 @@ class CompraFlujo3Form(BootstrapFormMixin, forms.ModelForm):
             "retencion_deudas_usd",
             "retencion_deudas_mxn",
             "total_deuda_en_dls",
+            "deudas_revisadas",
         ]
         labels = {
             "retencion_deudas_usd": "Retencion de USD",
             "retencion_deudas_mxn": "Retencion de MXN",
             "total_deuda_en_dls": "Total de deudas en DLS (calculado)",
+            "deudas_revisadas": "Deudas revisadas",
         }
 
     def __init__(self, *args, **kwargs):
@@ -225,11 +237,22 @@ class CompraFlujo3Form(BootstrapFormMixin, forms.ModelForm):
         self.fields["total_deuda_en_dls"].disabled = True
 
 
-class CompraFlujo4Form(BootstrapFormMixin, forms.ModelForm):
+class CompraFacturasForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Compra
-        fields = ["factura", "uuid_factura", "contador", "correo", "estatus_factura"]
+        fields = [
+            "solicitud_factura_enviada",
+            "fecha_solicitud_factura",
+            "factura",
+            "uuid_factura",
+            "contador",
+            "correo",
+            "estatus_factura",
+        ]
+        widgets = {"fecha_solicitud_factura": DateInput()}
         labels = {
+            "solicitud_factura_enviada": "Solicitud enviada",
+            "fecha_solicitud_factura": "Fecha solicitud",
             "factura": "Nombre de quien factura",
             "uuid_factura": "UUID de Factura",
             "correo": "Correo del contador",
@@ -295,3 +318,57 @@ class DocumentoCompraForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = DocumentoCompra
         fields = ["etapa", "descripcion", "archivo"]
+
+
+class CompraDivisionEstadoForm(BootstrapFormMixin, forms.ModelForm):
+    class Meta:
+        model = Compra
+        fields = ["division_revisada"]
+        labels = {"division_revisada": "Division revisada/completa"}
+
+
+class CompraDivisionCreateForm(BootstrapFormMixin, forms.Form):
+    porcentaje_division = forms.DecimalField(
+        max_digits=6, decimal_places=2, min_value=0.01, required=False
+    )
+    monto_division = forms.DecimalField(
+        max_digits=16, decimal_places=4, min_value=0.0001, required=False
+    )
+    factura = forms.CharField(required=False, max_length=200)
+    uuid_factura = forms.CharField(required=False, max_length=80)
+
+    def __init__(self, *args, **kwargs):
+        self.compra = kwargs.pop("compra")
+        super().__init__(*args, **kwargs)
+        self.fields["porcentaje_division"].label = "Porcentaje a dividir (opcional)"
+        self.fields["monto_division"].label = "Monto a dividir (opcional)"
+        self.fields["factura"].label = "Quien factura (opcional)"
+        self.fields["uuid_factura"].label = "UUID factura (opcional)"
+        self.fields["porcentaje_division"].widget.attrs["max"] = str(
+            self.compra.porcentaje_disponible_division
+        )
+        self.fields["monto_division"].widget.attrs["max"] = str(
+            self.compra.monto_disponible_division
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+        porcentaje = cleaned.get("porcentaje_division")
+        monto = cleaned.get("monto_division")
+        base = self.compra.compra_en_libras or 0
+
+        if not porcentaje and not monto:
+            raise forms.ValidationError("Captura porcentaje o monto para dividir.")
+        if monto:
+            if base <= 0:
+                raise forms.ValidationError("La compra base no tiene monto para dividir.")
+            if monto > self.compra.monto_disponible_division:
+                raise forms.ValidationError("El monto excede el disponible de la compra.")
+            porcentaje = (monto * 100) / base
+        elif porcentaje:
+            if porcentaje > self.compra.porcentaje_disponible_division:
+                raise forms.ValidationError("La division excede el disponible de la compra.")
+            monto = (base * porcentaje) / 100
+        cleaned["porcentaje_division"] = porcentaje
+        cleaned["monto_division"] = monto
+        return cleaned

@@ -27,6 +27,7 @@
             <thead>
                 <tr>
                     <th>Compra</th>
+                    <th>Tipo</th>
                     <th>Fecha LIQ</th>
                     <th>Productor</th>
                     <th>Factura (quien factura)</th>
@@ -42,6 +43,13 @@
                 {% for compra in page_obj %}
                 <tr>
                     <td>{{ compra.numero_compra }}</td>
+                    <td>
+                        {% if compra.es_division %}
+                        Division {{ compra.porcentaje_division|floatformat:2 }}%
+                        {% else %}
+                        Base
+                        {% endif %}
+                    </td>
                     <td>{{ compra.fecha_liq }}</td>
                     <td>{{ compra.productor.nombre }}</td>
                     <td>{{ compra.factura }}</td>
@@ -55,11 +63,14 @@
                     </td>
                     <td class="d-flex gap-1">
                         <a class="btn btn-outline-primary btn-sm" href="/compras/{{ compra.id }}/flujo/?step={{ compra.flujo_codigo }}">{{ compra.flujo_label }}</a>
+                        {% if not compra.es_division and compra.captura_completa %}
+                        <a class="btn btn-outline-warning btn-sm" href="/compras/{{ compra.id }}/flujo/?step=dividir">Dividir</a>
+                        {% endif %}
                         <a class="btn btn-outline-secondary btn-sm" href="/compras/{{ compra.id }}/editar/">Completa</a>
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="10" class="text-center py-4">No hay compras para mostrar.</td></tr>
+                <tr><td colspan="11" class="text-center py-4">No hay compras para mostrar.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

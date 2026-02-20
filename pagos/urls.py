@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     HomeView,
+    anticipos_view,
     compra_create_view,
     compra_edit_view,
     compra_flujo_view,
@@ -18,6 +19,7 @@ urlpatterns = [
     path("compras/nueva/", compra_create_view, name="compra_create"),
     path("compras/<int:compra_id>/flujo/", compra_flujo_view, name="compra_flujo"),
     path("compras/<int:compra_id>/editar/", compra_edit_view, name="compra_edit"),
+    path("anticipos/", anticipos_view, name="anticipos"),
     path("productores/", productores_catalogo_view, name="productores_catalogo"),
     path("productores/<int:productor_id>/editar/", productor_edit_view, name="productor_edit"),
 ]

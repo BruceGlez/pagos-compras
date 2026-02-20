@@ -33,15 +33,59 @@
         <div class="card">
             <div class="card-header"><strong>Formulario actual</strong></div>
             <div class="card-body">
-                {% if active_form_key %}
+                {% if active_form %}
                 <form method="post">
                     {% csrf_token %}
-                    <input type="hidden" name="flow_form" value="{{ active_form_key }}">
+                    <input type="hidden" name="flow_form" value="{{ current_step }}">
                     {{ active_form.as_p }}
                     <button class="btn btn-primary btn-sm" type="submit">Guardar y continuar</button>
                 </form>
                 {% else %}
                 <p class="mb-0">No hay formulario pendiente.</p>
+                {% endif %}
+
+                {% if current_step == "anticipos" %}
+                <hr>
+                <h6>Anticipos pendientes del productor</h6>
+                <ul class="list-group">
+                    {% for a in anticipos_pendientes %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>#{{ a.numero_anticipo }} - {{ a.fecha_pago }}</span>
+                        <strong>{{ a.saldo_disponible|floatformat:2 }}</strong>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item">Sin anticipos pendientes.</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+
+                {% if current_step == "dividir" and not compra.es_division %}
+                <hr>
+                <h6>Crear division</h6>
+                <p class="small mb-1">Monto base: <strong>{{ compra.compra_en_libras|floatformat:4 }}</strong></p>
+                <p class="small mb-1">Dividido: <strong>{{ compra.total_porcentaje_dividido|floatformat:2 }}%</strong></p>
+                <p class="small mb-2">Disponible para dividir: <strong>{{ compra.porcentaje_disponible_division|floatformat:2 }}%</strong></p>
+                <p class="small mb-2">Monto disponible: <strong>{{ compra.monto_disponible_division|floatformat:4 }}</strong></p>
+                <form method="post" class="mb-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="flow_form" value="dividir_crear">
+                    {{ division_form.as_p }}
+                    <p class="small text-muted mb-2">
+                        Porcentaje calculado por monto: <strong id="pct-calculado">-</strong>
+                    </p>
+                    <button class="btn btn-outline-primary btn-sm" type="submit">Agregar division</button>
+                </form>
+                <h6>Divisiones registradas</h6>
+                <ul class="list-group">
+                    {% for d in divisiones %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>ID {{ d.id }} - {{ d.porcentaje_division|floatformat:2 }}%</span>
+                        <a class="btn btn-sm btn-outline-secondary" href="/compras/{{ d.id }}/flujo/">Abrir</a>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item">Sin divisiones registradas.</li>
+                    {% endfor %}
+                </ul>
                 {% endif %}
             </div>
         </div>
@@ -72,4 +116,111 @@
         </div>
     </div>
 </div>
+
+{% if current_step == "dividir" and not compra.es_division %}
+<script>
+(() => {
+  const baseMonto = Number("{{ compra.compra_en_libras|default:0 }}");
+  const maxPct = Number("{{ compra.porcentaje_disponible_division|default:0 }}");
+  const maxMonto = Number("{{ compra.monto_disponible_division|default:0 }}");
+  const pctInput = document.getElementById("id_div-porcentaje_division");
+  const montoInput = document.getElementById("id_div-monto_division");
+  const pctLabel = document.getElementById("pct-calculado");
+  if (!pctInput || !montoInput || !pctLabel || !baseMonto) return;
+  let mode = null; // 'monto' | 'pct' | null
+
+  function setError(el, msg) {
+    el.setCustomValidity(msg || "");
+  }
+
+  function applyLocks() {
+    if (mode === "monto") {
+      montoInput.disabled = false;
+      pctInput.disabled = montoInput.value !== "";
+      return;
+    }
+    if (mode === "pct") {
+      pctInput.disabled = false;
+      montoInput.disabled = pctInput.value !== "";
+      return;
+    }
+    montoInput.disabled = false;
+    pctInput.disabled = false;
+  }
+
+  function resetState() {
+    mode = null;
+    pctInput.value = "";
+    montoInput.value = "";
+    pctLabel.textContent = "-";
+    setError(montoInput, "");
+    setError(pctInput, "");
+    applyLocks();
+  }
+
+  function onMontoInput() {
+    const raw = montoInput.value.trim();
+    if (!raw) {
+      resetState();
+      return;
+    }
+    mode = "monto";
+    setError(montoInput, "");
+    setError(pctInput, "");
+
+    const monto = Number(raw);
+    if (!Number.isFinite(monto) || monto <= 0) {
+      pctLabel.textContent = "-";
+      setError(montoInput, "Monto invalido.");
+      applyLocks();
+      return;
+    }
+    if (monto > maxMonto) {
+      setError(montoInput, "El monto excede el disponible.");
+    }
+    const pctCalc = (monto * 100) / baseMonto;
+    pctInput.value = Number.isFinite(pctCalc) ? pctCalc.toFixed(4) : "";
+    pctLabel.textContent = `${pctCalc.toFixed(4)}%`;
+    applyLocks();
+  }
+
+  function onPctInput() {
+    const raw = pctInput.value.trim();
+    if (!raw) {
+      resetState();
+      return;
+    }
+    mode = "pct";
+    setError(montoInput, "");
+    setError(pctInput, "");
+
+    const pct = Number(raw);
+    if (!Number.isFinite(pct) || pct <= 0) {
+      pctLabel.textContent = "-";
+      setError(pctInput, "Porcentaje invalido.");
+      applyLocks();
+      return;
+    }
+    if (pct > maxPct) {
+      setError(pctInput, "El porcentaje excede el disponible.");
+    }
+    const calcMonto = (baseMonto * pct) / 100;
+    montoInput.value = Number.isFinite(calcMonto) ? calcMonto.toFixed(4) : "";
+    pctLabel.textContent = `${pct.toFixed(4)}% (monto ${calcMonto.toFixed(4)})`;
+    applyLocks();
+  }
+
+  montoInput.addEventListener("input", onMontoInput);
+  pctInput.addEventListener("input", onPctInput);
+
+  if (montoInput.value.trim() && !pctInput.value.trim()) {
+    onMontoInput();
+  } else if (pctInput.value.trim() && !montoInput.value.trim()) {
+    onPctInput();
+  } else {
+    applyLocks();
+  }
+})();
+</script>
+{% endif %}
 {% endblock %}

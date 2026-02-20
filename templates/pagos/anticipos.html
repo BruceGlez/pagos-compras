@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Anticipos{% endblock %}
+{% block content %}
+<div class="row g-3">
+    <div class="col-lg-5">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0">Registrar anticipo</h5></div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <button class="btn btn-primary" type="submit">Guardar anticipo</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0">Anticipos registrados</h5></div>
+            <div class="table-responsive">
+                <table class="table table-striped mb-0">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Fecha</th>
+                            <th>Productor</th>
+                            <th>Monto</th>
+                            <th>Pendiente</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for a in anticipos %}
+                        <tr>
+                            <td>{{ a.numero_anticipo }}</td>
+                            <td>{{ a.fecha_pago }}</td>
+                            <td>{{ a.productor.nombre }}</td>
+                            <td>{{ a.monto_anticipo|floatformat:2 }}</td>
+                            <td>{{ a.pendiente_aplicar }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="text-center py-4">Sin anticipos.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

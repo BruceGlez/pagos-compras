@@ -1,21 +1,20 @@
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db.models import Count, Sum
-from django.db.models import Q
+from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.generic import ListView
 
 from .forms import (
     AnticipoForm,
     AplicacionAnticipoForm,
+    CompraDivisionCreateForm,
+    CompraFacturasForm,
     CompraFiltroForm,
-    CompraExpedienteForm,
     CompraFlujo1Form,
     CompraFlujo2Form,
     CompraFlujo3Form,
     CompraFlujo5Form,
-    CompraRegistrarFacturaForm,
-    CompraSolicitarFacturaForm,
+    CompraFlujoAnticiposForm,
     CompraOperativaForm,
     CompraForm,
     DocumentoCompraForm,
@@ -36,14 +35,8 @@ class HomeView(ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        anticipos_stats = Anticipo.objects.aggregate(
-            total=Sum("monto_anticipo"),
-            conteo=Count("id"),
-        )
-        compras_stats = Compra.objects.aggregate(
-            total=Sum("compra_en_libras"),
-            conteo=Count("id"),
-        )
+        anticipos_stats = Anticipo.objects.aggregate(total=Sum("monto_anticipo"), conteo=Count("id"))
+        compras_stats = Compra.objects.aggregate(total=Sum("compra_en_libras"), conteo=Count("id"))
         context["productores_activos"] = Productor.objects.filter(activo=True).count()
         context["anticipos_total"] = anticipos_stats["total"] or 0
         context["anticipos_count"] = anticipos_stats["conteo"] or 0
@@ -75,11 +68,11 @@ def registro_view(request):
                     return redirect(f"{request.path}?form={active}")
                 messages.error(request, "Revisa los errores del formulario.")
 
-    context = {
-        "form_instances": form_instances,
-        "active_form": active,
-    }
-    return render(request, "pagos/registro.html", context)
+    return render(
+        request,
+        "pagos/registro.html",
+        {"form_instances": form_instances, "active_form": active},
+    )
 
 
 def compras_operativas_view(request):
@@ -106,14 +99,7 @@ def compras_operativas_view(request):
 
     paginator = Paginator(qs, 25)
     page_obj = paginator.get_page(request.GET.get("page"))
-    return render(
-        request,
-        "pagos/compras_operativas.html",
-        {
-            "filtro_form": filtro,
-            "page_obj": page_obj,
-        },
-    )
+    return render(request, "pagos/compras_operativas.html", {"filtro_form": filtro, "page_obj": page_obj})
 
 
 def compra_create_view(request):
@@ -121,16 +107,12 @@ def compra_create_view(request):
         form = CompraFlujo1Form(request.POST)
         if form.is_valid():
             compra = form.save()
-            messages.success(request, "Flujo 1 guardado. Continúa con los siguientes pasos.")
+            messages.success(request, "Flujo 1 guardado. Continua con los siguientes pasos.")
             return redirect("compra_flujo", compra_id=compra.id)
         messages.error(request, "Revisa los datos de la compra.")
     else:
         form = CompraFlujo1Form()
-    return render(
-        request,
-        "pagos/compra_form.html",
-        {"form": form, "form_title": "Nueva Compra - Flujo 1"},
-    )
+    return render(request, "pagos/compra_form.html", {"form": form, "form_title": "Nueva Compra - Flujo 1"})
 
 
 def compra_edit_view(request, compra_id):
@@ -144,45 +126,62 @@ def compra_edit_view(request, compra_id):
         messages.error(request, "Revisa los datos de la compra.")
     else:
         form = CompraOperativaForm(instance=compra)
-    return render(
-        request,
-        "pagos/compra_form.html",
-        {"form": form, "form_title": f"Editar Compra {compra.numero_compra}"},
-    )
+    return render(request, "pagos/compra_form.html", {"form": form, "form_title": f"Editar Compra {compra.numero_compra}"})
 
 
 def compra_flujo_view(request, compra_id):
     compra = get_object_or_404(Compra, pk=compra_id)
-    ui_pending_step = compra.flujo_codigo if compra.flujo_codigo != "completo" else "expediente"
+    ui_pending_step = compra.flujo_codigo
     form_map = {
-        "flujo1": (CompraFlujo1Form, "Flujo 1 actualizado."),
-        "solicitar_factura": (CompraSolicitarFacturaForm, "Solicitud de factura actualizada."),
-        "registrar_factura": (CompraRegistrarFacturaForm, "Factura registrada."),
-        "flujo3": (CompraFlujo3Form, "Flujo 3 actualizado."),
+        "captura": (CompraFlujo1Form, "Captura actualizada."),
+        "anticipos": (CompraFlujoAnticiposForm, "Anticipos revisados."),
+        "deudas": (CompraFlujo3Form, "Deudas actualizadas."),
+        "facturas": (CompraFacturasForm, "Facturas actualizadas."),
         "pago": (CompraFlujo5Form, "Pago actualizado."),
-        "expediente": (CompraExpedienteForm, "Expediente actualizado."),
-        "flujo2": (CompraFlujo2Form, "Tipo de cambio actualizado."),
+        "tc": (CompraFlujo2Form, "Tipo de cambio actualizado."),
     }
-
     forms = {k: cls(instance=compra, prefix=k) for k, (cls, _) in form_map.items()}
     documento_form = DocumentoCompraForm(prefix="doc")
+    division_form = CompraDivisionCreateForm(compra=compra, prefix="div")
+
     if request.method == "POST":
         form_name = request.POST.get("flow_form")
         if form_name == "documento":
-            documento_form = DocumentoCompraForm(
-                request.POST, request.FILES, prefix="doc"
-            )
+            documento_form = DocumentoCompraForm(request.POST, request.FILES, prefix="doc")
             if documento_form.is_valid():
                 doc = documento_form.save(commit=False)
                 doc.compra = compra
                 doc.save()
                 messages.success(request, "Documento cargado al expediente.")
                 compra.refresh_from_db()
-                next_step = (
-                    compra.flujo_codigo if compra.flujo_codigo != "completo" else "expediente"
-                )
-                return redirect(f"/compras/{compra.id}/flujo/?step={next_step}")
+                return redirect(f"/compras/{compra.id}/flujo/?step={compra.flujo_codigo}")
             messages.error(request, "Error al cargar documento.")
+        elif form_name == "dividir_crear":
+            division_form = CompraDivisionCreateForm(request.POST, compra=compra, prefix="div")
+            if division_form.is_valid():
+                pct = division_form.cleaned_data["porcentaje_division"]
+                child = Compra(
+                    numero_compra=compra.numero_compra,
+                    fecha_liq=compra.fecha_liq,
+                    productor=compra.productor,
+                    regimen_fiscal=compra.regimen_fiscal,
+                    parent_compra=compra,
+                    porcentaje_division=pct,
+                    pacas=(compra.pacas or 0) * pct / 100,
+                    compra_en_libras=(compra.compra_en_libras or 0) * pct / 100,
+                    tipo_cambio=compra.tipo_cambio,
+                    tipo_cambio_valor=compra.tipo_cambio_valor,
+                    moneda=compra.moneda,
+                    factura=division_form.cleaned_data.get("factura", ""),
+                    uuid_factura=division_form.cleaned_data.get("uuid_factura", ""),
+                    anticipos_revisados=True,
+                    deudas_revisadas=True,
+                    division_revisada=True,
+                )
+                child.save()
+                messages.success(request, "Division creada correctamente.")
+                return redirect(f"/compras/{compra.id}/flujo/?step=dividir")
+            messages.error(request, "Error al crear division.")
         elif form_name in form_map:
             form_cls, msg = form_map[form_name]
             forms[form_name] = form_cls(request.POST, instance=compra, prefix=form_name)
@@ -190,41 +189,24 @@ def compra_flujo_view(request, compra_id):
                 forms[form_name].save()
                 messages.success(request, msg)
                 compra.refresh_from_db()
-                next_step = (
-                    compra.flujo_codigo if compra.flujo_codigo != "completo" else "expediente"
-                )
-                return redirect(f"/compras/{compra.id}/flujo/?step={next_step}")
+                return redirect(f"/compras/{compra.id}/flujo/?step={compra.flujo_codigo}")
             messages.error(request, "Hay errores en el formulario.")
 
-    step_to_form = {
-        "captura": "flujo1",
-        "solicitar_factura": "solicitar_factura",
-        "registrar_factura": "registrar_factura",
-        "pago": "pago",
-        "expediente": "expediente",
-        "tc": "flujo2",
-        "deudas": "flujo3",
-    }
     current_step = request.GET.get("step") or ui_pending_step
     step_items = [
-        ("captura", "Captura"),
-        ("solicitar_factura", "Solicitar factura"),
-        ("registrar_factura", "Registrar factura"),
-        ("pago", "Pago"),
-        ("expediente", "Expediente"),
+        ("captura", "Registrar compra"),
+        ("anticipos", "Revisar anticipos"),
+        ("deudas", "Revisar deudas"),
+        ("facturas", "Solicitar facturas"),
+        ("pago", "Pagar factura"),
     ]
-    extra_items = [("tc", "TC"), ("deudas", "Deudas")]
+    extra_items = [("tc", "TC")]
+    if not compra.es_division and compra.captura_completa:
+        extra_items.append(("dividir", "Dividir compra"))
     main_order = [code for code, _ in step_items]
-    pending_idx = (
-        main_order.index(ui_pending_step)
-        if ui_pending_step in main_order
-        else len(main_order) - 1
-    )
-
+    pending_idx = main_order.index(ui_pending_step) if ui_pending_step in main_order else len(main_order) - 1
     unlocked_main = set(main_order[: pending_idx + 1])
-    unlocked_extra = (
-        {code for code, _ in extra_items} if compra.captura_completa else set()
-    )
+    unlocked_extra = {code for code, _ in extra_items} if compra.captura_completa else set()
     unlocked_steps = unlocked_main | unlocked_extra
     if compra.flujo_codigo == "completo":
         unlocked_steps = set(main_order) | set(code for code, _ in extra_items)
@@ -232,33 +214,29 @@ def compra_flujo_view(request, compra_id):
     if request.GET.get("step") and current_step not in unlocked_steps:
         messages.warning(request, "Ese paso aun no esta disponible. Se muestra el paso pendiente.")
         return redirect(f"/compras/{compra.id}/flujo/?step={ui_pending_step}")
-
     if current_step not in unlocked_steps:
         current_step = ui_pending_step
 
-    active_form_key = step_to_form.get(current_step, step_to_form.get(ui_pending_step))
-    active_form = forms.get(active_form_key) if active_form_key else None
-    step_items_ui = [
-        {"code": code, "label": label, "unlocked": code in unlocked_steps}
-        for code, label in step_items
-    ]
-    extra_items_ui = [
-        {"code": code, "label": label, "unlocked": code in unlocked_steps}
-        for code, label in extra_items
-    ]
+    active_form = forms.get(current_step)
+    step_items_ui = [{"code": code, "label": label, "unlocked": code in unlocked_steps} for code, label in step_items]
+    extra_items_ui = [{"code": code, "label": label, "unlocked": code in unlocked_steps} for code, label in extra_items]
+
     return render(
         request,
         "pagos/compra_flujo.html",
         {
             "compra": compra,
-            "forms": forms,
             "documento_form": documento_form,
             "current_step": current_step,
-            "active_form_key": active_form_key,
             "active_form": active_form,
             "step_items": step_items_ui,
             "extra_items": extra_items_ui,
             "documentos": compra.documentos.all()[:30],
+            "division_form": division_form,
+            "divisiones": compra.divisiones.select_related("productor").order_by("id"),
+            "anticipos_pendientes": compra.productor.anticipos.filter(
+                pendiente_aplicar="PENDIENTE"
+            ).order_by("-fecha_pago")[:20],
         },
     )
 
@@ -279,11 +257,7 @@ def productores_catalogo_view(request):
         messages.error(request, "Revisa los datos del productor.")
     else:
         form = ProductorForm(prefix="prod")
-    return render(
-        request,
-        "pagos/productores_catalogo.html",
-        {"productores": productores[:300], "form": form, "q": q},
-    )
+    return render(request, "pagos/productores_catalogo.html", {"productores": productores[:300], "form": form, "q": q})
 
 
 def productor_edit_view(request, productor_id):
@@ -297,8 +271,23 @@ def productor_edit_view(request, productor_id):
         messages.error(request, "Revisa los datos del productor.")
     else:
         form = ProductorForm(instance=productor, prefix="prod")
+    return render(request, "pagos/productor_form.html", {"form": form, "productor": productor})
+
+
+def anticipos_view(request):
+    anticipos = Anticipo.objects.select_related("productor").order_by("-fecha_pago", "-numero_anticipo")
+    if request.method == "POST":
+        form = AnticipoForm(request.POST, prefix="ant")
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Anticipo guardado.")
+            return redirect("anticipos")
+        messages.error(request, "Revisa los datos del anticipo.")
+    else:
+        form = AnticipoForm(prefix="ant")
+
     return render(
         request,
-        "pagos/productor_form.html",
-        {"form": form, "productor": productor},
+        "pagos/anticipos.html",
+        {"anticipos": anticipos[:300], "form": form},
     )

@@ -1,5 +1,6 @@
 from django.test import TestCase
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 
 from .models import Anticipo, AplicacionAnticipo, Compra, Productor, TipoCambio
 
@@ -39,3 +40,31 @@ class PagosFlowTests(TestCase):
         self.compra.refresh_from_db()
         self.assertEqual(self.anticipo.saldo_disponible, 6000)
         self.assertEqual(self.compra.saldo_por_pagar, 11000)
+
+    def test_divisiones_no_exceden_100_por_ciento(self):
+        Compra.objects.create(
+            numero_compra=1,
+            productor=self.productor,
+            fecha_de_pago=timezone.now().date(),
+            fecha_liq=timezone.now().date(),
+            compra_en_libras=300,
+            parent_compra=self.compra,
+            porcentaje_division=60,
+            anticipos_revisados=True,
+            deudas_revisadas=True,
+            division_revisada=True,
+        )
+        over = Compra(
+            numero_compra=1,
+            productor=self.productor,
+            fecha_de_pago=timezone.now().date(),
+            fecha_liq=timezone.now().date(),
+            compra_en_libras=300,
+            parent_compra=self.compra,
+            porcentaje_division=50,
+            anticipos_revisados=True,
+            deudas_revisadas=True,
+            division_revisada=True,
+        )
+        with self.assertRaises(ValidationError):
+            over.full_clean()

@@ -33,8 +33,19 @@ App:
 - `http://127.0.0.1:8000/registro/`
 - `http://127.0.0.1:8000/compras/`
 - `http://127.0.0.1:8000/compras/<id>/flujo/`
+- `http://127.0.0.1:8000/anticipos/`
 - `http://127.0.0.1:8000/productores/`
 - `http://127.0.0.1:8000/admin/`
+
+Flujo operativo de compras:
+1. Registrar compra
+2. Revisar anticipos
+3. Revisar deudas
+4. Solicitar/registrar facturas
+5. Pagar factura
+
+Accion adicional (opcional):
+- Dividir compra (suma de divisiones <= 100%)
 
 ## PostgreSQL
 
