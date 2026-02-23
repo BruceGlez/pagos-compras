@@ -5,6 +5,7 @@ from .models import (
     AplicacionAnticipo,
     Compra,
     DocumentoCompra,
+    PagoCompra,
     Productor,
     TipoCambio,
 )
@@ -318,6 +319,26 @@ class DocumentoCompraForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = DocumentoCompra
         fields = ["etapa", "descripcion", "archivo"]
+
+
+class PagoCompraForm(BootstrapFormMixin, forms.ModelForm):
+    class Meta:
+        model = PagoCompra
+        fields = [
+            "fecha_pago",
+            "monto",
+            "moneda",
+            "cuenta_de_pago",
+            "metodo_de_pago",
+            "referencia",
+            "notas",
+        ]
+        widgets = {"fecha_pago": DateInput()}
+        labels = {
+            "monto": "Monto del pago",
+            "cuenta_de_pago": "Cuenta de la que se pago",
+            "metodo_de_pago": "Metodo de pago",
+        }
 
 
 class CompraDivisionEstadoForm(BootstrapFormMixin, forms.ModelForm):

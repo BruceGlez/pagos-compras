@@ -4,7 +4,11 @@
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">{{ form_title }}</h5>
+        {% if next_url %}
+        <a class="btn btn-outline-secondary btn-sm" href="{{ next_url }}">Volver</a>
+        {% else %}
         <a class="btn btn-outline-secondary btn-sm" href="/compras/">Volver a compras</a>
+        {% endif %}
     </div>
     <div class="card-body">
         <div class="alert alert-info py-2">
@@ -13,6 +17,7 @@
         </div>
         <form method="post" class="row g-3" novalidate>
             {% csrf_token %}
+            {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
             {% for field in form %}
             <div class="col-md-4">
                 <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>

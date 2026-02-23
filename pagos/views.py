@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.core.paginator import Paginator
+from django.db.models.deletion import ProtectedError
 from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.generic import ListView
@@ -13,15 +14,15 @@ from .forms import (
     CompraFlujo1Form,
     CompraFlujo2Form,
     CompraFlujo3Form,
-    CompraFlujo5Form,
     CompraFlujoAnticiposForm,
     CompraOperativaForm,
     CompraForm,
     DocumentoCompraForm,
+    PagoCompraForm,
     ProductorForm,
     TipoCambioForm,
 )
-from .models import Anticipo, Compra, Productor, TipoCambio
+from .models import Anticipo, Compra, PagoCompra, Productor, TipoCambio
 
 
 class HomeView(ListView):
@@ -122,27 +123,68 @@ def compra_edit_view(request, compra_id):
         if form.is_valid():
             form.save()
             messages.success(request, "Compra actualizada correctamente.")
+            next_url = request.POST.get("next") or request.GET.get("next")
+            if next_url:
+                return redirect(next_url)
             return redirect("compras_operativas")
         messages.error(request, "Revisa los datos de la compra.")
     else:
         form = CompraOperativaForm(instance=compra)
-    return render(request, "pagos/compra_form.html", {"form": form, "form_title": f"Editar Compra {compra.numero_compra}"})
+    return render(
+        request,
+        "pagos/compra_form.html",
+        {
+            "form": form,
+            "form_title": f"Editar Compra {compra.numero_compra}",
+            "next_url": request.GET.get("next", ""),
+        },
+    )
+
+
+def division_delete_view(request, compra_id):
+    if request.method != "POST":
+        return redirect("compras_operativas")
+    division = get_object_or_404(Compra, pk=compra_id)
+    if not division.es_division:
+        messages.error(request, "Solo se pueden eliminar compras de tipo division.")
+        return redirect("compras_operativas")
+
+    parent_id = division.parent_compra_id
+    try:
+        division.delete()
+        messages.success(request, "Division eliminada correctamente.")
+    except ProtectedError:
+        messages.error(
+            request,
+            "No se puede eliminar la division porque tiene movimientos relacionados (anticipos/pagos).",
+        )
+    return redirect(f"/compras/{parent_id}/flujo/?step=dividir")
+
+
+def pago_delete_view(request, pago_id):
+    if request.method != "POST":
+        return redirect("compras_operativas")
+    pago = get_object_or_404(PagoCompra, pk=pago_id)
+    compra_id = pago.compra_id
+    pago.delete()
+    messages.success(request, "Pago eliminado correctamente.")
+    return redirect(f"/compras/{compra_id}/flujo/?step=pago")
 
 
 def compra_flujo_view(request, compra_id):
     compra = get_object_or_404(Compra, pk=compra_id)
-    ui_pending_step = compra.flujo_codigo
+    ui_pending_step = compra.flujo_step_default
     form_map = {
         "captura": (CompraFlujo1Form, "Captura actualizada."),
         "anticipos": (CompraFlujoAnticiposForm, "Anticipos revisados."),
         "deudas": (CompraFlujo3Form, "Deudas actualizadas."),
         "facturas": (CompraFacturasForm, "Facturas actualizadas."),
-        "pago": (CompraFlujo5Form, "Pago actualizado."),
         "tc": (CompraFlujo2Form, "Tipo de cambio actualizado."),
     }
     forms = {k: cls(instance=compra, prefix=k) for k, (cls, _) in form_map.items()}
     documento_form = DocumentoCompraForm(prefix="doc")
     division_form = CompraDivisionCreateForm(compra=compra, prefix="div")
+    pago_form = PagoCompraForm(prefix="pagoitem")
 
     if request.method == "POST":
         form_name = request.POST.get("flow_form")
@@ -154,8 +196,17 @@ def compra_flujo_view(request, compra_id):
                 doc.save()
                 messages.success(request, "Documento cargado al expediente.")
                 compra.refresh_from_db()
-                return redirect(f"/compras/{compra.id}/flujo/?step={compra.flujo_codigo}")
+                return redirect(f"/compras/{compra.id}/flujo/?step={compra.flujo_step_default}")
             messages.error(request, "Error al cargar documento.")
+        elif form_name == "pago_registrar":
+            pago_form = PagoCompraForm(request.POST, prefix="pagoitem")
+            if pago_form.is_valid():
+                pago = pago_form.save(commit=False)
+                pago.compra = compra
+                pago.save()
+                messages.success(request, "Pago registrado.")
+                return redirect(f"/compras/{compra.id}/flujo/?step=pago")
+            messages.error(request, "Error al registrar pago.")
         elif form_name == "dividir_crear":
             division_form = CompraDivisionCreateForm(request.POST, compra=compra, prefix="div")
             if division_form.is_valid():
@@ -174,9 +225,9 @@ def compra_flujo_view(request, compra_id):
                     moneda=compra.moneda,
                     factura=division_form.cleaned_data.get("factura", ""),
                     uuid_factura=division_form.cleaned_data.get("uuid_factura", ""),
-                    anticipos_revisados=True,
-                    deudas_revisadas=True,
-                    division_revisada=True,
+                    anticipos_revisados=False,
+                    deudas_revisadas=False,
+                    division_revisada=False,
                 )
                 child.save()
                 messages.success(request, "Division creada correctamente.")
@@ -189,7 +240,7 @@ def compra_flujo_view(request, compra_id):
                 forms[form_name].save()
                 messages.success(request, msg)
                 compra.refresh_from_db()
-                return redirect(f"/compras/{compra.id}/flujo/?step={compra.flujo_codigo}")
+                return redirect(f"/compras/{compra.id}/flujo/?step={compra.flujo_step_default}")
             messages.error(request, "Hay errores en el formulario.")
 
     current_step = request.GET.get("step") or ui_pending_step
@@ -234,6 +285,10 @@ def compra_flujo_view(request, compra_id):
             "documentos": compra.documentos.all()[:30],
             "division_form": division_form,
             "divisiones": compra.divisiones.select_related("productor").order_by("id"),
+            "pago_form": pago_form,
+            "pagos_registrados": compra.pagos_registrados.all(),
+            "total_pagado_registrado": compra.total_pagado_registrado,
+            "monto_objetivo_pago": compra.compra_en_libras,
             "anticipos_pendientes": compra.productor.anticipos.filter(
                 pendiente_aplicar="PENDIENTE"
             ).order_by("-fecha_pago")[:20],

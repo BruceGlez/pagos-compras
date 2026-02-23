@@ -20,13 +20,13 @@ class PagosFlowTests(TestCase):
             productor=self.productor,
             fecha_de_pago=timezone.now().date(),
             fecha_liq=timezone.now().date(),
-            compra_en_libras=500,
+            compra_en_libras=15000,
             pago=15000,
             tipo_cambio=self.tc,
         )
 
     def test_compra_total_and_saldo(self):
-        self.assertEqual(self.compra.base_pago, 15000)
+        self.assertEqual(self.compra.base_pago, 0)
         self.assertEqual(self.compra.saldo_por_pagar, 15000)
 
     def test_aplicacion_de_anticipo_recalcula_saldo(self):
@@ -80,3 +80,17 @@ class PagosFlowTests(TestCase):
             monto_anticipo=5000,
         )
         self.assertIsNotNone(a.numero_anticipo)
+
+    def test_division_sigue_mismo_flujo_que_compra_base(self):
+        division = Compra.objects.create(
+            numero_compra=1,
+            productor=self.productor,
+            fecha_liq=timezone.now().date(),
+            fecha_de_pago=timezone.now().date(),
+            parent_compra=self.compra,
+            porcentaje_division=25,
+            pacas=10,
+            compra_en_libras=125,
+            tipo_cambio=self.tc,
+        )
+        self.assertEqual(division.flujo_codigo, "anticipos")

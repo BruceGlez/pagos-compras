@@ -254,9 +254,7 @@ class Compra(TimestampedModel):
 
     @property
     def base_pago(self):
-        if self.pago is not None:
-            return self.pago
-        return self.total_en_pesos
+        return self.total_pagado_vigente
 
     @property
     def total_aplicado_anticipos(self):
@@ -267,7 +265,38 @@ class Compra(TimestampedModel):
 
     @property
     def saldo_por_pagar(self):
-        return self.base_pago - self.total_aplicado_anticipos
+        objetivo = self.compra_en_libras or Decimal("0")
+        return objetivo - self.total_pagado_vigente - self.total_aplicado_anticipos
+
+    @property
+    def total_pagado_registrado(self):
+        value = self.pagos_registrados.aggregate(total=Sum("monto"))["total"]
+        return value or Decimal("0")
+
+    @property
+    def total_pagado_vigente(self):
+        # Prioridad al nuevo esquema de pagos independientes.
+        if self.pagos_registrados.exists():
+            return self.total_pagado_registrado
+        # Compatibilidad legacy: solo considerar pago manual si estatus no es pendiente.
+        if self.estatus_de_pago in (EstadoPagoChoices.PAGADO, EstadoPagoChoices.PARCIAL):
+            return self.pago or Decimal("0")
+        return Decimal("0")
+
+    def actualizar_estatus_pago_desde_registros(self):
+        if not self.pagos_registrados.exists():
+            self.estatus_de_pago = EstadoPagoChoices.PENDIENTE
+            self.pago = Decimal("0")
+            return
+        total_pagado = self.total_pagado_registrado
+        self.pago = total_pagado
+        objetivo = self.compra_en_libras or Decimal("0")
+        if total_pagado <= 0:
+            self.estatus_de_pago = EstadoPagoChoices.PENDIENTE
+        elif objetivo > 0 and total_pagado < objetivo:
+            self.estatus_de_pago = EstadoPagoChoices.PARCIAL
+        else:
+            self.estatus_de_pago = EstadoPagoChoices.PAGADO
 
     def save(self, *args, **kwargs):
         if self.productor_id and not self.regimen_fiscal:
@@ -361,6 +390,8 @@ class Compra(TimestampedModel):
 
     @property
     def pago_registrado(self):
+        if self.pagos_registrados.exists():
+            return self.estatus_de_pago == EstadoPagoChoices.PAGADO
         return bool(
             self.fecha_de_pago
             and self.pago is not None
@@ -369,20 +400,13 @@ class Compra(TimestampedModel):
 
     @property
     def flujo_codigo(self):
-        if self.es_division:
-            if not self.factura_registrada:
-                return "facturas"
-            if not self.pago_registrado:
-                return "pago"
-            return "completo"
-
         if not self.captura_completa:
             return "captura"
         if not self.anticipos_revisados:
             return "anticipos"
         if not self.deudas_revisadas:
             return "deudas"
-        if not self.factura_registrada:
+        if not self.solicitud_factura_enviada:
             return "facturas"
         if not self.pago_registrado:
             return "pago"
@@ -411,6 +435,16 @@ class Compra(TimestampedModel):
             "completo": 100,
         }
         return steps[self.flujo_codigo]
+
+    @property
+    def flujo_step_default(self):
+        # "completo" no tiene formulario propio; para ajustes abrimos Pago.
+        return "pago" if self.flujo_codigo == "completo" else self.flujo_codigo
+
+    @property
+    def uuid_factura_faltante(self):
+        # Recordatorio no bloqueante: se solicito factura pero aun no llega UUID.
+        return bool(self.solicitud_factura_enviada and not self.uuid_factura)
 
 
 class AplicacionAnticipo(TimestampedModel):
@@ -477,3 +511,37 @@ class DocumentoCompra(TimestampedModel):
 
     def __str__(self):
         return f"Documento compra {self.compra_id} ({self.etapa})"
+
+
+class PagoCompra(TimestampedModel):
+    compra = models.ForeignKey(
+        Compra, on_delete=models.CASCADE, related_name="pagos_registrados"
+    )
+    fecha_pago = models.DateField(default=timezone.localdate)
+    monto = models.DecimalField(max_digits=16, decimal_places=4)
+    moneda = models.CharField(
+        max_length=20, choices=MonedaChoices.choices, default=MonedaChoices.DOLARES
+    )
+    cuenta_de_pago = models.CharField(max_length=120, blank=True)
+    metodo_de_pago = models.CharField(max_length=60, blank=True)
+    referencia = models.CharField(max_length=100, blank=True)
+    notas = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-fecha_pago", "-id"]
+
+    def __str__(self):
+        return f"Pago {self.id} compra {self.compra_id}"
+
+    def save(self, *args, **kwargs):
+        result = super().save(*args, **kwargs)
+        self.compra.actualizar_estatus_pago_desde_registros()
+        self.compra.save(update_fields=["pago", "estatus_de_pago", "updated_at"])
+        return result
+
+    def delete(self, *args, **kwargs):
+        compra = self.compra
+        result = super().delete(*args, **kwargs)
+        compra.actualizar_estatus_pago_desde_registros()
+        compra.save(update_fields=["pago", "estatus_de_pago", "updated_at"])
+        return result

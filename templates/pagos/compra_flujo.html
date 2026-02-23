@@ -5,7 +5,12 @@
 <div class="card mb-3">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Compra {{ compra.numero_compra }} - Flujo</h5>
-        <a class="btn btn-outline-secondary btn-sm" href="/compras/">Volver a compras</a>
+        <div class="d-flex gap-2">
+            {% if not compra.es_division %}
+            <a class="btn btn-outline-secondary btn-sm" href="/compras/{{ compra.id }}/editar/?next={% url 'compra_flujo' compra.id %}%3Fstep%3D{{ current_step }}">Editar base</a>
+            {% endif %}
+            <a class="btn btn-outline-secondary btn-sm" href="/compras/">Volver a compras</a>
+        </div>
     </div>
     <div class="card-body">
         <p class="mb-2"><strong>Productor:</strong> {{ compra.productor.nombre }}</p>
@@ -26,6 +31,14 @@
             {% endfor %}
         </div>
         <div class="mt-2"><strong>Paso pendiente:</strong> {{ compra.flujo_label }} ({{ compra.flujo_progress }}%)</div>
+        {% if compra.flujo_codigo == "completo" %}
+        <div class="mt-1 small text-muted">Compra completada. Puedes editar el pago o cualquier paso desde los botones.</div>
+        {% endif %}
+        {% if compra.uuid_factura_faltante %}
+        <div class="mt-2 alert alert-warning py-2 mb-0">
+            Recordatorio: falta registrar el UUID de la factura para esta compra.
+        </div>
+        {% endif %}
     </div>
 </div>
 
@@ -41,8 +54,61 @@
                     {{ active_form.as_p }}
                     <button class="btn btn-primary btn-sm" type="submit">Guardar y continuar</button>
                 </form>
+                {% if current_step == "pago" and compra.uuid_factura_faltante %}
+                <p class="small text-warning mt-2 mb-0">Se puede registrar el pago, pero el UUID de factura sigue pendiente.</p>
+                {% endif %}
                 {% else %}
                 <p class="mb-0">No hay formulario pendiente.</p>
+                {% endif %}
+
+                {% if current_step == "pago" %}
+                <hr>
+                <h6>Registrar pago parcial</h6>
+                <form method="post" class="mb-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="flow_form" value="pago_registrar">
+                    {{ pago_form.as_p }}
+                    <button class="btn btn-outline-primary btn-sm" type="submit">Agregar pago</button>
+                </form>
+
+                <div class="small mb-2">
+                    <strong>Objetivo total:</strong> {{ monto_objetivo_pago|money }} |
+                    <strong>Total pagado:</strong> {{ total_pagado_registrado|money }} |
+                    <strong>Saldo:</strong> {{ compra.saldo_por_pagar|money }}
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Monto</th>
+                                <th>Moneda</th>
+                                <th>Cuenta</th>
+                                <th>Metodo</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in pagos_registrados %}
+                            <tr>
+                                <td>{{ p.fecha_pago }}</td>
+                                <td class="text-nowrap">{{ p.monto|money }}</td>
+                                <td>{{ p.moneda }}</td>
+                                <td>{{ p.cuenta_de_pago }}</td>
+                                <td>{{ p.metodo_de_pago }}</td>
+                                <td>
+                                    <form method="post" action="/pagos/{{ p.id }}/eliminar/" onsubmit="return confirm('Eliminar pago #{{ p.id }}?')">
+                                        {% csrf_token %}
+                                        <button class="btn btn-sm btn-outline-danger" type="submit">Eliminar</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="6" class="text-center">Sin pagos registrados.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
                 {% endif %}
 
                 {% if current_step == "anticipos" %}
@@ -79,9 +145,16 @@
                 <h6>Divisiones registradas</h6>
                 <ul class="list-group">
                     {% for d in divisiones %}
-                    <li class="list-group-item d-flex justify-content-between">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
                         <span>ID {{ d.id }} - {{ d.porcentaje_division|floatformat:2 }}%</span>
-                        <a class="btn btn-sm btn-outline-secondary" href="/compras/{{ d.id }}/flujo/">Abrir</a>
+                        <div class="d-flex gap-2">
+                            <a class="btn btn-sm btn-outline-secondary" href="/compras/{{ d.id }}/flujo/">Abrir</a>
+                            <a class="btn btn-sm btn-outline-secondary" href="/compras/{{ d.id }}/editar/?next={% url 'compra_flujo' compra.id %}%3Fstep%3Ddividir">Editar</a>
+                            <form method="post" action="/compras/{{ d.id }}/eliminar-division/" onsubmit="return confirm('Eliminar division ID {{ d.id }}?')">
+                                {% csrf_token %}
+                                <button class="btn btn-sm btn-outline-danger" type="submit">Eliminar</button>
+                            </form>
+                        </div>
                     </li>
                     {% empty %}
                     <li class="list-group-item">Sin divisiones registradas.</li>
