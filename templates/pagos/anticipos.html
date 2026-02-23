@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load pagos_extras %}
 {% block title %}Anticipos{% endblock %}
 {% block content %}
 <div class="row g-3">
@@ -34,7 +35,7 @@
                             <td>{{ a.numero_anticipo }}</td>
                             <td>{{ a.fecha_pago }}</td>
                             <td>{{ a.productor.nombre }}</td>
-                            <td>{{ a.monto_anticipo|floatformat:2 }}</td>
+                            <td>{{ a.monto_anticipo|money }}</td>
                             <td>{{ a.pendiente_aplicar }}</td>
                         </tr>
                         {% empty %}

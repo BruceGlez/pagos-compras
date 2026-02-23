@@ -27,7 +27,6 @@ class ProductorForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Productor
         fields = [
-            "codigo",
             "nombre",
             "regimen_fiscal",
             "cuenta_productor",
@@ -49,7 +48,6 @@ class AnticipoForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Anticipo
         fields = [
-            "numero_anticipo",
             "fecha_pago",
             "productor",
             "persona_que_factura",
@@ -110,6 +108,7 @@ class CompraForm(BootstrapFormMixin, forms.ModelForm):
             "productor": "PRODUCTOR (base)",
             "uuid_factura": "UUID FACTURA",
             "factura": "FACTURA (quien factura)",
+            "compra_en_libras": "Total en DLS",
         }
 
 
@@ -161,6 +160,7 @@ class CompraOperativaForm(BootstrapFormMixin, forms.ModelForm):
             "productor": "PRODUCTOR (base)",
             "uuid_factura": "UUID FACTURA",
             "factura": "FACTURA (quien factura)",
+            "compra_en_libras": "Total en DLS",
         }
 
 
@@ -191,7 +191,7 @@ class CompraFlujo1Form(BootstrapFormMixin, forms.ModelForm):
         ]
         widgets = {"fecha_liq": DateInput()}
         labels = {
-            "compra_en_libras": "Total en Libras",
+            "compra_en_libras": "Total en DLS",
             "productor": "Productor (con regimen fiscal en catalogo)",
         }
 

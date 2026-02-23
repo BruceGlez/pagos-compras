@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load pagos_extras %}
 {% block title %}Flujo Compra {{ compra.numero_compra }}{% endblock %}
 {% block content %}
 <div class="card mb-3">
@@ -51,7 +52,7 @@
                     {% for a in anticipos_pendientes %}
                     <li class="list-group-item d-flex justify-content-between">
                         <span>#{{ a.numero_anticipo }} - {{ a.fecha_pago }}</span>
-                        <strong>{{ a.saldo_disponible|floatformat:2 }}</strong>
+                        <strong>{{ a.saldo_disponible|money }}</strong>
                     </li>
                     {% empty %}
                     <li class="list-group-item">Sin anticipos pendientes.</li>
@@ -62,10 +63,10 @@
                 {% if current_step == "dividir" and not compra.es_division %}
                 <hr>
                 <h6>Crear division</h6>
-                <p class="small mb-1">Monto base: <strong>{{ compra.compra_en_libras|floatformat:4 }}</strong></p>
+                <p class="small mb-1">Monto base en DLS: <strong>{{ compra.compra_en_libras|money4 }}</strong></p>
                 <p class="small mb-1">Dividido: <strong>{{ compra.total_porcentaje_dividido|floatformat:2 }}%</strong></p>
                 <p class="small mb-2">Disponible para dividir: <strong>{{ compra.porcentaje_disponible_division|floatformat:2 }}%</strong></p>
-                <p class="small mb-2">Monto disponible: <strong>{{ compra.monto_disponible_division|floatformat:4 }}</strong></p>
+                <p class="small mb-2">Monto disponible: <strong>{{ compra.monto_disponible_division|money4 }}</strong></p>
                 <form method="post" class="mb-3">
                     {% csrf_token %}
                     <input type="hidden" name="flow_form" value="dividir_crear">

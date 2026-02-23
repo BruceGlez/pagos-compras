@@ -1,4 +1,5 @@
 from decimal import Decimal
+from django.db import IntegrityError
 
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -64,6 +65,23 @@ class Productor(TimestampedModel):
 
     def __str__(self):
         return f"{self.codigo} - {self.nombre}"
+
+    @staticmethod
+    def _next_codigo():
+        last = Productor.objects.order_by("-id").first()
+        next_num = (last.id + 1) if last else 1
+        return f"PRD-{next_num:05d}"
+
+    def save(self, *args, **kwargs):
+        if not self.codigo:
+            for _ in range(5):
+                self.codigo = self._next_codigo()
+                try:
+                    return super().save(*args, **kwargs)
+                except IntegrityError:
+                    self.codigo = ""
+            raise RuntimeError("No se pudo generar codigo automatico para productor.")
+        return super().save(*args, **kwargs)
 
 
 class TipoCambio(TimestampedModel):
@@ -138,6 +156,16 @@ class Anticipo(TimestampedModel):
         )
 
     def save(self, *args, **kwargs):
+        if not self.numero_anticipo:
+            for _ in range(5):
+                last = Anticipo.objects.order_by("-numero_anticipo").first()
+                self.numero_anticipo = (last.numero_anticipo + 1) if last and last.numero_anticipo else 1
+                try:
+                    self.actualizar_estado()
+                    return super().save(*args, **kwargs)
+                except IntegrityError:
+                    self.numero_anticipo = None
+            raise RuntimeError("No se pudo generar numero automatico de anticipo.")
         self.actualizar_estado()
         return super().save(*args, **kwargs)
 

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load pagos_extras %}
 {% block title %}Dashboard | Pagos Algodon{% endblock %}
 {% block content %}
 <div class="row g-3 mb-4">
@@ -14,7 +15,7 @@
         <div class="card card-metric">
             <div class="card-body">
                 <p class="metric-label">Anticipos registrados</p>
-                <h4 class="mb-0">${{ anticipos_total|floatformat:2 }}</h4>
+                <h4 class="mb-0">{{ anticipos_total|money }}</h4>
                 <small>{{ anticipos_count }} registros</small>
             </div>
         </div>
@@ -22,8 +23,8 @@
     <div class="col-md-3">
         <div class="card card-metric">
             <div class="card-body">
-                <p class="metric-label">Libras compradas</p>
-                <h4 class="mb-0">{{ compras_total_libras|floatformat:2 }} lb</h4>
+                <p class="metric-label">Total en DLS</p>
+                <h4 class="mb-0">{{ compras_total_libras|money }}</h4>
                 <small>{{ compras_count }} compras</small>
             </div>
         </div>
@@ -55,7 +56,7 @@
                     <th>Fecha LIQ</th>
                     <th>Compra</th>
                     <th>Productor</th>
-                    <th>Libras</th>
+                    <th>Total en DLS</th>
                     <th>Pago</th>
                     <th>Saldo</th>
                 </tr>
@@ -66,9 +67,9 @@
                     <td>{{ compra.fecha_liq }}</td>
                     <td>{{ compra.numero_compra }}</td>
                     <td>{{ compra.productor.nombre }}</td>
-                    <td>{{ compra.compra_en_libras|floatformat:2 }}</td>
-                    <td>{{ compra.base_pago|floatformat:2 }}</td>
-                    <td>{{ compra.saldo_por_pagar|floatformat:2 }}</td>
+                    <td class="text-nowrap">{{ compra.compra_en_libras|money }}</td>
+                    <td class="text-nowrap">{{ compra.base_pago|money }}</td>
+                    <td class="text-nowrap">{{ compra.saldo_por_pagar|money }}</td>
                 </tr>
                 {% empty %}
                 <tr>

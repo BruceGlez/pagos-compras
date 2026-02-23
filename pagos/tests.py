@@ -68,3 +68,15 @@ class PagosFlowTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             over.full_clean()
+
+    def test_codigo_productor_se_genera_automaticamente(self):
+        p = Productor.objects.create(nombre="Maria")
+        self.assertTrue(p.codigo.startswith("PRD-"))
+
+    def test_numero_anticipo_se_genera_automaticamente(self):
+        a = Anticipo.objects.create(
+            productor=self.productor,
+            fecha_pago=timezone.now().date(),
+            monto_anticipo=5000,
+        )
+        self.assertIsNotNone(a.numero_anticipo)

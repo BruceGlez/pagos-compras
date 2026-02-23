@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load pagos_extras %}
 {% block title %}Compras Operativas{% endblock %}
 {% block content %}
 <div class="card mb-3">
@@ -32,7 +33,7 @@
                     <th>Productor</th>
                     <th>Factura (quien factura)</th>
                     <th>UUID FACTURA</th>
-                    <th>Libras</th>
+                    <th>Total en DLS</th>
                     <th>Pago</th>
                     <th>Saldo</th>
                     <th>Flujo</th>
@@ -54,9 +55,9 @@
                     <td>{{ compra.productor.nombre }}</td>
                     <td>{{ compra.factura }}</td>
                     <td>{{ compra.uuid_factura }}</td>
-                    <td>{{ compra.compra_en_libras|floatformat:2 }}</td>
-                    <td>{{ compra.base_pago|floatformat:2 }}</td>
-                    <td>{{ compra.saldo_por_pagar|floatformat:2 }}</td>
+                    <td class="text-nowrap">{{ compra.compra_en_libras|money }}</td>
+                    <td class="text-nowrap">{{ compra.base_pago|money }}</td>
+                    <td class="text-nowrap">{{ compra.saldo_por_pagar|money }}</td>
                     <td>
                         <div><strong>{{ compra.flujo_label }}</strong></div>
                         <small>{{ compra.flujo_progress }}%</small>
