@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from django.db import IntegrityError
 
 from django.core.exceptions import ValidationError
@@ -270,8 +270,10 @@ class Compra(TimestampedModel):
 
     @property
     def total_pagado_registrado(self):
-        value = self.pagos_registrados.aggregate(total=Sum("monto"))["total"]
-        return value or Decimal("0")
+        total = Decimal("0")
+        for pago in self.pagos_registrados.all():
+            total += pago.monto_en_dolares
+        return total
 
     @property
     def total_pagado_vigente(self):
@@ -310,7 +312,7 @@ class Compra(TimestampedModel):
                 self.tipo_cambio_valor = tc.tc
         if self.fecha_de_pago and self.fecha_liq:
             self.dias_transcurridos = (self.fecha_de_pago - self.fecha_liq).days
-        tc_val = self.tipo_cambio_valor or Decimal("0")
+        tc_val = Decimal(str(self.tipo_cambio_valor or "0"))
         if tc_val > 0:
             self.total_deuda_en_dls = self.retencion_deudas_usd + (
                 self.retencion_deudas_mxn / tc_val
@@ -532,6 +534,19 @@ class PagoCompra(TimestampedModel):
 
     def __str__(self):
         return f"Pago {self.id} compra {self.compra_id}"
+
+    @property
+    def monto_en_dolares(self):
+        if self.moneda == MonedaChoices.DOLARES:
+            return self.monto
+        if self.moneda == MonedaChoices.PESOS:
+            tc_pactado = Decimal(str(self.compra.tipo_cambio_valor or "0"))
+            if tc_pactado > 0:
+                return (self.monto / tc_pactado).quantize(
+                    Decimal("0.0001"), rounding=ROUND_HALF_UP
+                )
+            return Decimal("0")
+        return self.monto
 
     def save(self, *args, **kwargs):
         result = super().save(*args, **kwargs)

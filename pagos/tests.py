@@ -1,8 +1,17 @@
 from django.test import TestCase
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from datetime import timedelta
 
-from .models import Anticipo, AplicacionAnticipo, Compra, Productor, TipoCambio
+from .models import (
+    Anticipo,
+    AplicacionAnticipo,
+    Compra,
+    MonedaChoices,
+    PagoCompra,
+    Productor,
+    TipoCambio,
+)
 
 
 class PagosFlowTests(TestCase):
@@ -94,3 +103,47 @@ class PagosFlowTests(TestCase):
             tipo_cambio=self.tc,
         )
         self.assertEqual(division.flujo_codigo, "anticipos")
+
+    def test_pago_en_pesos_se_convierte_a_usd_con_tc_pactado(self):
+        fecha_sin_tc = timezone.now().date() + timedelta(days=1)
+        self.compra.fecha_liq = fecha_sin_tc
+        self.compra.tipo_cambio = None
+        self.compra.tipo_cambio_valor = 20
+        self.compra.compra_en_libras = 1000
+        self.compra.save(
+            update_fields=["fecha_liq", "tipo_cambio", "tipo_cambio_valor", "compra_en_libras", "updated_at"]
+        )
+
+        PagoCompra.objects.create(
+            compra=self.compra,
+            fecha_pago=timezone.now().date(),
+            monto=2000,
+            moneda=MonedaChoices.PESOS,
+        )
+        self.compra.refresh_from_db()
+
+        self.assertEqual(self.compra.total_pagado_registrado, 100)
+        self.assertEqual(self.compra.saldo_por_pagar, 900)
+        self.assertEqual(self.compra.estatus_de_pago, "PARCIAL")
+
+    def test_pago_en_pesos_con_tc_no_disponible_no_aplica_descuento(self):
+        fecha_sin_tc = timezone.now().date() + timedelta(days=1)
+        self.compra.fecha_liq = fecha_sin_tc
+        self.compra.tipo_cambio = None
+        self.compra.tipo_cambio_valor = None
+        self.compra.compra_en_libras = 1000
+        self.compra.save(
+            update_fields=["fecha_liq", "tipo_cambio", "tipo_cambio_valor", "compra_en_libras", "updated_at"]
+        )
+
+        PagoCompra.objects.create(
+            compra=self.compra,
+            fecha_pago=timezone.now().date(),
+            monto=2000,
+            moneda=MonedaChoices.PESOS,
+        )
+        self.compra.refresh_from_db()
+
+        self.assertEqual(self.compra.total_pagado_registrado, 0)
+        self.assertEqual(self.compra.saldo_por_pagar, 1000)
+        self.assertEqual(self.compra.estatus_de_pago, "PENDIENTE")

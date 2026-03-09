@@ -72,16 +72,17 @@
                 </form>
 
                 <div class="small mb-2">
-                    <strong>Objetivo total:</strong> {{ monto_objetivo_pago|money }} |
-                    <strong>Total pagado:</strong> {{ total_pagado_registrado|money }} |
-                    <strong>Saldo:</strong> {{ compra.saldo_por_pagar|money }}
+                    <strong>Objetivo total (USD):</strong> {{ monto_objetivo_pago|money }} |
+                    <strong>Total pagado aplicado (USD):</strong> {{ total_pagado_registrado|money }} |
+                    <strong>Saldo (USD):</strong> {{ compra.saldo_por_pagar|money }}
                 </div>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle">
                         <thead>
                             <tr>
                                 <th>Fecha</th>
-                                <th>Monto</th>
+                                <th>Monto capturado</th>
+                                <th>Aplicado USD</th>
                                 <th>Moneda</th>
                                 <th>Cuenta</th>
                                 <th>Metodo</th>
@@ -93,6 +94,7 @@
                             <tr>
                                 <td>{{ p.fecha_pago }}</td>
                                 <td class="text-nowrap">{{ p.monto|money }}</td>
+                                <td class="text-nowrap">{{ p.monto_en_dolares|money }}</td>
                                 <td>{{ p.moneda }}</td>
                                 <td>{{ p.cuenta_de_pago }}</td>
                                 <td>{{ p.metodo_de_pago }}</td>
@@ -104,7 +106,7 @@
                                 </td>
                             </tr>
                             {% empty %}
-                            <tr><td colspan="6" class="text-center">Sin pagos registrados.</td></tr>
+                            <tr><td colspan="7" class="text-center">Sin pagos registrados.</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>
