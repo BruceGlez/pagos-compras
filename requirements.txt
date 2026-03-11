@@ -4,3 +4,6 @@ requests==2.32.3
 openpyxl==3.1.5
 xlrd==2.0.1
 fdb==2.0.3
+google-api-python-client==2.166.0
+google-auth-oauthlib==1.2.1
+google-auth-httplib2==0.2.0

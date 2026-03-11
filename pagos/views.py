@@ -3,6 +3,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.mail import send_mail
 from django.core.paginator import Paginator
 from django.db.models.deletion import ProtectedError
 from django.db.models import Count, Q, Sum
@@ -28,6 +29,7 @@ from .forms import (
     ContadorForm,
     DeduccionForm,
     DocumentoCompraForm,
+    EmailTemplateForm,
     ImportAnticiposExcelForm,
     ImportComprasExcelForm,
     PagoCompraForm,
@@ -36,13 +38,17 @@ from .forms import (
     TipoCambioForm,
     XmlValidationConfigForm,
 )
-from .models import Anticipo, Compra, Contador, Deduccion, ImportRun, PagoCompra, PersonaFactura, Productor, TipoCambio, WorkflowStateChoices, XmlValidationConfig
+from .models import Anticipo, Compra, Contador, Deduccion, EmailOutboxLog, EmailTemplate, ImportRun, PagoCompra, PersonaFactura, Productor, TipoCambio, WorkflowStateChoices, XmlValidationConfig
 from .services import (
+    build_invoice_request_email,
     build_invoice_request_message,
+    render_invoice_email_html,
     create_invoice_validation_for_compra,
     detect_compras_conflicts,
+    gmail_ready,
     import_anticipos_excel,
     import_compras_excel,
+    send_gmail,
     payable_breakdown,
     find_microsip_candidates_for_productor,
     list_all_microsip_debt_clients,
@@ -611,7 +617,14 @@ def compra_flujo_view(request, compra_id):
                     )
 
                     if validation.valid:
-                        messages.success(request, "XML de factura validado correctamente.")
+                        updates = []
+                        if validation.uuid and compra.uuid_factura != validation.uuid:
+                            compra.uuid_factura = validation.uuid
+                            updates.append("uuid_factura")
+                        if updates:
+                            updates.append("updated_at")
+                            compra.save(update_fields=updates)
+                        messages.success(request, "XML de factura validado correctamente. UUID actualizado automáticamente.")
                         try:
                             transition_compra(
                                 compra,
@@ -657,6 +670,46 @@ def compra_flujo_view(request, compra_id):
                 messages.success(request, "Facturador creado y asignado a la compra.")
                 return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
             messages.error(request, "No se pudo crear el facturador. Revisa los datos.")
+        elif form_name == "enviar_solicitud_email":
+            to_email = (settings.SOLICITUD_FACTURA_TEST_TO or compra.correo or "").strip()
+            if not to_email:
+                messages.error(request, "No hay correo destino configurado.")
+                return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
+            payload = build_invoice_request_email(compra)
+            subject = payload["subject"]
+            body = payload["body"]
+            try:
+                provider = "gmail_oauth" if gmail_ready() else "smtp"
+                provider_msg_id = ""
+                html_body = render_invoice_email_html(body)
+                if provider == "gmail_oauth":
+                    provider_msg_id = send_gmail(to_email, subject, body, html_body=html_body)
+                else:
+                    send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [to_email], fail_silently=False, html_message=html_body)
+                EmailOutboxLog.objects.create(
+                    compra=compra,
+                    to_email=to_email,
+                    subject=subject,
+                    body=body,
+                    template_code=payload.get("template_code", ""),
+                    provider=provider,
+                    status="SENT",
+                    error=(provider_msg_id or ""),
+                )
+                messages.success(request, f"Correo de solicitud enviado a {to_email} ({provider}).")
+            except Exception as e:
+                EmailOutboxLog.objects.create(
+                    compra=compra,
+                    to_email=to_email,
+                    subject=subject,
+                    body=body,
+                    template_code=payload.get("template_code", ""),
+                    provider="gmail_oauth" if gmail_ready() else "smtp",
+                    status="ERROR",
+                    error=str(e),
+                )
+                messages.error(request, f"No se pudo enviar correo: {e}")
+            return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
         elif form_name == "marcar_solicitud_factura":
             compra.solicitud_factura_enviada = True
             compra.save(update_fields=["solicitud_factura_enviada", "updated_at"])
@@ -985,7 +1038,7 @@ def compra_validacion_factura_view(request, compra_id):
         global_rfc = (cfg.global_rfc_receptor or settings.CFDI_RFC_RECEPTOR_GLOBAL or "").strip().upper()
         expected_moneda = (compra.expected_moneda or "").strip().upper()
 
-        create_invoice_validation_for_compra(
+        v = create_invoice_validation_for_compra(
             compra,
             xml_bytes,
             expected_rfc_receptor=((compra.expected_rfc_receptor or "").strip().upper() or global_rfc),
@@ -1001,6 +1054,9 @@ def compra_validacion_factura_view(request, compra_id):
             requires_resico_retention=requires_resico,
             resico_policy=resico_policy,
         )
+        if v.valid and v.uuid and compra.uuid_factura != v.uuid:
+            compra.uuid_factura = v.uuid
+            compra.save(update_fields=["uuid_factura", "updated_at"])
         messages.success(request, "XML revalidado con reglas actuales.")
         return redirect(f"/compras/{compra.id}/validacion-factura/")
 
@@ -1109,6 +1165,60 @@ def contador_edit_view(request, contador_id):
     else:
         form = ContadorForm(instance=contador, prefix="cont")
     return render(request, "pagos/contador_form.html", {"form": form, "contador": contador})
+
+
+@login_required
+def plantillas_email_view(request):
+    templates = EmailTemplate.objects.order_by("scenario", "nombre")
+    if request.method == "POST":
+        if not _can_write(request.user):
+            messages.error(request, "No tienes permisos de edición.")
+            return redirect("plantillas_email")
+        form = EmailTemplateForm(request.POST, prefix="tpl")
+        if form.is_valid():
+            tpl = form.save()
+            if tpl.is_default:
+                EmailTemplate.objects.exclude(pk=tpl.pk).filter(scenario=tpl.scenario).update(is_default=False)
+            messages.success(request, "Plantilla guardada.")
+            return redirect("plantillas_email")
+        messages.error(request, "Revisa los datos de la plantilla.")
+    else:
+        form = EmailTemplateForm(prefix="tpl")
+    return render(request, "pagos/plantillas_email.html", {"templates": templates, "form": form})
+
+
+@login_required
+def plantilla_email_delete_view(request, template_id):
+    tpl = get_object_or_404(EmailTemplate, pk=template_id)
+    if request.method != "POST":
+        return redirect("plantillas_email")
+    user = getattr(request, "user", None)
+    if not user or not user.is_authenticated or not user.is_superuser:
+        messages.error(request, "Solo admin puede eliminar plantillas.")
+        return redirect("plantillas_email")
+    tpl.delete()
+    messages.success(request, "Plantilla eliminada.")
+    return redirect("plantillas_email")
+
+
+@login_required
+def plantilla_email_edit_view(request, template_id):
+    tpl = get_object_or_404(EmailTemplate, pk=template_id)
+    if request.method == "POST":
+        if not _can_write(request.user):
+            messages.error(request, "No tienes permisos de edición.")
+            return redirect("plantillas_email")
+        form = EmailTemplateForm(request.POST, instance=tpl, prefix="tpl")
+        if form.is_valid():
+            tpl = form.save()
+            if tpl.is_default:
+                EmailTemplate.objects.exclude(pk=tpl.pk).filter(scenario=tpl.scenario).update(is_default=False)
+            messages.success(request, "Plantilla actualizada.")
+            return redirect("plantillas_email")
+        messages.error(request, "Revisa los datos de la plantilla.")
+    else:
+        form = EmailTemplateForm(instance=tpl, prefix="tpl")
+    return render(request, "pagos/plantilla_email_form.html", {"form": form, "tpl": tpl})
 
 
 @login_required

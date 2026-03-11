@@ -722,6 +722,33 @@ class XmlValidationConfig(TimestampedModel):
         return obj
 
 
+class EmailTemplate(TimestampedModel):
+    code = models.CharField(max_length=40, unique=True)
+    nombre = models.CharField(max_length=120)
+    scenario = models.CharField(max_length=40, blank=True, default="GENERAL")
+    subject_template = models.CharField(max_length=240)
+    body_template = models.TextField()
+    is_default = models.BooleanField(default=False)
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["nombre"]
+
+
+class EmailOutboxLog(TimestampedModel):
+    compra = models.ForeignKey("Compra", on_delete=models.CASCADE, related_name="email_logs")
+    to_email = models.EmailField()
+    subject = models.CharField(max_length=240)
+    body = models.TextField(blank=True)
+    template_code = models.CharField(max_length=40, blank=True, default="")
+    provider = models.CharField(max_length=40, default="smtp")
+    status = models.CharField(max_length=20, default="SENT")
+    error = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+
 class WorkflowEvent(TimestampedModel):
     compra = models.ForeignKey(Compra, on_delete=models.CASCADE, related_name="workflow_events")
     from_state = models.CharField(max_length=40, blank=True)

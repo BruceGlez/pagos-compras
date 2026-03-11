@@ -20,6 +20,9 @@ from .views import (
     contadores_catalogo_view,
     facturador_edit_view,
     facturadores_catalogo_view,
+    plantilla_email_delete_view,
+    plantilla_email_edit_view,
+    plantillas_email_view,
     import_anticipos_view,
     import_compras_view,
     readiness_queue_action_view,
@@ -57,4 +60,7 @@ urlpatterns = [
     path("facturadores/", facturadores_catalogo_view, name="facturadores_catalogo"),
     path("facturadores/<int:facturador_id>/editar/", facturador_edit_view, name="facturador_edit"),
     path("config/xml-validacion/", configuracion_validacion_xml_view, name="config_validacion_xml"),
+    path("plantillas-email/", plantillas_email_view, name="plantillas_email"),
+    path("plantillas-email/<int:template_id>/editar/", plantilla_email_edit_view, name="plantilla_email_edit"),
+    path("plantillas-email/<int:template_id>/eliminar/", plantilla_email_delete_view, name="plantilla_email_delete"),
 ]

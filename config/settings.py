@@ -126,6 +126,20 @@ BANXICO_TC_OBJETIVO = os.getenv("BANXICO_TC_OBJETIVO", "publicacion_dof")
 # Reglas globales CFDI
 CFDI_RFC_RECEPTOR_GLOBAL = os.getenv("CFDI_RFC_RECEPTOR_GLOBAL", "UAM140522Q51").strip().upper()
 
+# Email (Gmail/API adapter can replace this transport later)
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "1") == "1"
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "no-reply@localhost")
+SOLICITUD_FACTURA_TEST_TO = os.getenv("SOLICITUD_FACTURA_TEST_TO", "bgonzalez@unamsa.mx")
+
+GMAIL_OAUTH_CLIENT_FILE = os.getenv("GMAIL_OAUTH_CLIENT_FILE", str(BASE_DIR.parent / ".secrets" / "gmail_oauth_client.json"))
+GMAIL_OAUTH_TOKEN_FILE = os.getenv("GMAIL_OAUTH_TOKEN_FILE", str(BASE_DIR.parent / ".secrets" / "gmail_oauth_token.json"))
+GMAIL_OAUTH_SENDER = os.getenv("GMAIL_OAUTH_SENDER", "brucegonzalezpeters1@gmail.com")
+
 LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"

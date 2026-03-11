@@ -17,6 +17,7 @@ from .models import (
     PagoCompra,
     PersonaFactura,
     Productor,
+    EmailTemplate,
     XmlValidationConfig,
     TipoCambio,
     WorkflowStateChoices,
@@ -89,6 +90,12 @@ class ContadorForm(BootstrapFormMixin, forms.ModelForm):
         if not email:
             raise forms.ValidationError("El correo es obligatorio para registrar un contador.")
         return email
+
+
+class EmailTemplateForm(BootstrapFormMixin, forms.ModelForm):
+    class Meta:
+        model = EmailTemplate
+        fields = ["code", "nombre", "scenario", "subject_template", "body_template", "is_default", "activo"]
 
 
 class XmlValidationConfigForm(BootstrapFormMixin, forms.ModelForm):
