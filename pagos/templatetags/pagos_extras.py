@@ -24,3 +24,10 @@ def money(value):
 def money4(value):
     amount = _to_decimal(value)
     return f"$ {amount:,.4f}"
+
+
+@register.filter
+def get_item(mapping, key):
+    if isinstance(mapping, dict):
+        return mapping.get(key, "")
+    return ""

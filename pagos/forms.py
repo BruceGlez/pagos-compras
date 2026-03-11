@@ -1,13 +1,25 @@
 from django import forms
 
+from .catalogs import (
+    SAT_FORMAS_PAGO,
+    SAT_METODOS_PAGO,
+    SAT_REGIMENES_FISCALES,
+    SAT_REGIMENES_MAP,
+    SAT_USOS_CFDI,
+)
 from .models import (
     Anticipo,
     AplicacionAnticipo,
     Compra,
+    Contador,
+    Deduccion,
     DocumentoCompra,
     PagoCompra,
+    PersonaFactura,
     Productor,
+    XmlValidationConfig,
     TipoCambio,
+    WorkflowStateChoices,
 )
 
 
@@ -25,17 +37,97 @@ class BootstrapFormMixin:
 
 
 class ProductorForm(BootstrapFormMixin, forms.ModelForm):
+    regimen_fiscal = forms.ChoiceField(
+        required=False,
+        choices=[("", "Selecciona régimen fiscal SAT...")] + SAT_REGIMENES_FISCALES,
+        label="Régimen fiscal (SAT)",
+    )
+
     class Meta:
         model = Productor
         fields = [
             "nombre",
             "regimen_fiscal",
+            "microsip_cliente_nombre",
+            "microsip_cliente_id",
+            "contador",
             "cuenta_productor",
             "telefono",
             "correo_facturas",
             "activo",
             "notas",
         ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            code = self.instance.regimen_fiscal_codigo or ""
+            if not code and self.instance.regimen_fiscal:
+                maybe = self.instance.regimen_fiscal.strip().split(" ")[0]
+                if maybe.isdigit() and len(maybe) == 3:
+                    code = maybe
+            if code:
+                self.initial["regimen_fiscal"] = code
+
+    def save(self, commit=True):
+        obj = super().save(commit=False)
+        code = self.cleaned_data.get("regimen_fiscal", "") or ""
+        obj.regimen_fiscal_codigo = code
+        obj.regimen_fiscal = SAT_REGIMENES_MAP.get(code, code)
+        if commit:
+            obj.save()
+        return obj
+
+
+class ContadorForm(BootstrapFormMixin, forms.ModelForm):
+    class Meta:
+        model = Contador
+        fields = ["nombre", "telefono", "email", "activo"]
+
+    def clean_email(self):
+        email = (self.cleaned_data.get("email") or "").strip()
+        if not email:
+            raise forms.ValidationError("El correo es obligatorio para registrar un contador.")
+        return email
+
+
+class XmlValidationConfigForm(BootstrapFormMixin, forms.ModelForm):
+    global_efecto_comprobante = forms.ChoiceField(
+        required=False,
+        choices=[("", "(Sin validar)")] + [("I", "I Ingreso"), ("E", "E Egreso"), ("T", "T Traslado"), ("N", "N Nómina"), ("P", "P Pago")],
+        label="Efecto comprobante",
+    )
+
+    class Meta:
+        model = XmlValidationConfig
+        fields = [
+            "global_rfc_receptor",
+            "global_regimen_fiscal_receptor",
+            "global_codigo_fiscal_receptor",
+            "global_nombre_receptor",
+            "global_efecto_comprobante",
+            "global_impuesto_trasladado",
+        ]
+        labels = {
+            "global_rfc_receptor": "RFC receptor",
+            "global_regimen_fiscal_receptor": "Régimen fiscal receptor",
+            "global_codigo_fiscal_receptor": "Código fiscal receptor",
+            "global_nombre_receptor": "Nombre receptor",
+            "global_efecto_comprobante": "Efecto comprobante",
+            "global_impuesto_trasladado": "Impuesto trasladado",
+        }
+
+    def clean(self):
+        cleaned = super().clean()
+        for k in [
+            "global_rfc_receptor",
+            "global_regimen_fiscal_receptor",
+            "global_codigo_fiscal_receptor",
+            "global_nombre_receptor",
+            "global_efecto_comprobante",
+        ]:
+            cleaned[k] = (cleaned.get(k) or "").strip().upper()
+        return cleaned
 
 
 class TipoCambioForm(BootstrapFormMixin, forms.ModelForm):
@@ -51,6 +143,7 @@ class AnticipoForm(BootstrapFormMixin, forms.ModelForm):
         fields = [
             "fecha_pago",
             "productor",
+            "persona_facturadora",
             "persona_que_factura",
             "factura",
             "monto_anticipo",
@@ -178,6 +271,11 @@ class CompraFiltroForm(BootstrapFormMixin, forms.Form):
         required=False,
         choices=[("", "Todos")] + list(Compra._meta.get_field("estatus_de_pago").choices),
     )
+    workflow_state = forms.ChoiceField(
+        required=False,
+        label="Estado workflow",
+        choices=[("", "Todos")] + list(WorkflowStateChoices.choices),
+    )
 
 
 class CompraFlujo1Form(BootstrapFormMixin, forms.ModelForm):
@@ -244,7 +342,7 @@ class CompraFacturasForm(BootstrapFormMixin, forms.ModelForm):
         fields = [
             "solicitud_factura_enviada",
             "fecha_solicitud_factura",
-            "factura",
+            "facturador",
             "uuid_factura",
             "contador",
             "correo",
@@ -254,10 +352,33 @@ class CompraFacturasForm(BootstrapFormMixin, forms.ModelForm):
         labels = {
             "solicitud_factura_enviada": "Solicitud enviada",
             "fecha_solicitud_factura": "Fecha solicitud",
-            "factura": "Nombre de quien factura",
+            "facturador": "Entidad que emitirá la factura (RFC)",
             "uuid_factura": "UUID de Factura",
             "correo": "Correo del contador",
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["facturador"].queryset = PersonaFactura.objects.filter(activo=True).order_by("nombre")
+        self.fields["facturador"].widget.attrs.update({"class": "form-select js-filterable-select"})
+
+        linked_contador = None
+        if self.instance and self.instance.pk and self.instance.facturador_id:
+            linked_contador = getattr(self.instance.facturador, "contador", None)
+
+        if linked_contador:
+            if not (self.initial.get("contador") or self.instance.contador):
+                self.initial["contador"] = linked_contador.nombre
+            if not (self.initial.get("correo") or self.instance.correo):
+                self.initial["correo"] = linked_contador.email
+
+    def clean(self):
+        cleaned = super().clean()
+        facturador = cleaned.get("facturador")
+        if facturador and facturador.contador:
+            cleaned["contador"] = facturador.contador.nombre
+            cleaned["correo"] = facturador.contador.email
+        return cleaned
 
 
 class CompraFlujo5Form(BootstrapFormMixin, forms.ModelForm):
@@ -286,25 +407,125 @@ class CompraFlujo5Form(BootstrapFormMixin, forms.ModelForm):
 
 
 class CompraSolicitarFacturaForm(BootstrapFormMixin, forms.ModelForm):
+    expected_moneda = forms.ChoiceField(
+        required=False,
+        choices=[("", "(Sin validar moneda)")] + [("USD", "USD Dólar americano"), ("MXN", "MXN Peso mexicano")],
+        label="Moneda esperada",
+    )
+    expected_forma_pago = forms.ChoiceField(
+        required=False,
+        choices=[("", "(Sin validar forma)")] + SAT_FORMAS_PAGO,
+        label="Forma de pago esperada",
+    )
+    expected_metodo_pago = forms.ChoiceField(
+        required=False,
+        choices=[("", "(Sin validar método)")] + SAT_METODOS_PAGO,
+        label="Método de pago esperado",
+    )
+    expected_uso_cfdi = forms.ChoiceField(
+        required=False,
+        choices=[("", "(Sin validar uso CFDI)")] + SAT_USOS_CFDI,
+        label="Uso CFDI esperado",
+    )
+
     class Meta:
         model = Compra
-        fields = ["solicitud_factura_enviada", "fecha_solicitud_factura", "contador", "correo"]
+        fields = [
+            "solicitud_factura_enviada",
+            "fecha_solicitud_factura",
+            "facturador",
+            "expected_moneda",
+            "expected_forma_pago",
+            "expected_metodo_pago",
+            "expected_uso_cfdi",
+            "contador",
+            "correo",
+        ]
         widgets = {"fecha_solicitud_factura": DateInput()}
         labels = {
             "solicitud_factura_enviada": "Solicitud enviada",
             "fecha_solicitud_factura": "Fecha solicitud",
+            "facturador": "Entidad que emitirá la factura (RFC)",
+            "expected_moneda": "Moneda esperada",
+            "expected_forma_pago": "Forma de pago esperada",
+            "expected_metodo_pago": "Método de pago esperado",
+            "expected_uso_cfdi": "Uso CFDI esperado",
             "correo": "Correo contador",
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["facturador"].queryset = PersonaFactura.objects.filter(activo=True).order_by("nombre")
+        self.fields["facturador"].widget.attrs.update({"class": "form-select js-filterable-select"})
+
+        if not self.initial.get("expected_moneda"):
+            if (self.instance.moneda or "") == "DOLARES":
+                self.initial["expected_moneda"] = "USD"
+            elif (self.instance.moneda or "") == "PESOS":
+                self.initial["expected_moneda"] = "MXN"
+        if not self.initial.get("expected_metodo_pago"):
+            self.initial["expected_metodo_pago"] = "PUE"
+        if not self.initial.get("expected_forma_pago"):
+            self.initial["expected_forma_pago"] = "03"
+        if not self.initial.get("expected_uso_cfdi"):
+            self.initial["expected_uso_cfdi"] = "G01"
+
+        linked_contador = None
+        if self.instance and self.instance.pk and self.instance.facturador_id:
+            linked_contador = getattr(self.instance.facturador, "contador", None)
+
+        if linked_contador:
+            if not (self.initial.get("contador") or self.instance.contador):
+                self.initial["contador"] = linked_contador.nombre
+            if not (self.initial.get("correo") or self.instance.correo):
+                self.initial["correo"] = linked_contador.email
+
+    def clean(self):
+        cleaned = super().clean()
+        facturador = cleaned.get("facturador")
+        if facturador and facturador.contador:
+            cleaned["contador"] = facturador.contador.nombre
+            cleaned["correo"] = facturador.contador.email
+        cleaned["expected_moneda"] = (cleaned.get("expected_moneda") or "").strip().upper()
+        cleaned["expected_metodo_pago"] = (cleaned.get("expected_metodo_pago") or "").strip().upper()
+        cleaned["expected_forma_pago"] = (cleaned.get("expected_forma_pago") or "").strip().upper()
+        cleaned["expected_uso_cfdi"] = (cleaned.get("expected_uso_cfdi") or "").strip().upper()
+        return cleaned
+
+
+class PersonaFacturaQuickForm(BootstrapFormMixin, forms.ModelForm):
+    regimen_fiscal_codigo = forms.ChoiceField(
+        required=False,
+        choices=[("", "Selecciona régimen fiscal SAT...")] + SAT_REGIMENES_FISCALES,
+        label="Código régimen SAT",
+    )
+
+    class Meta:
+        model = PersonaFactura
+        fields = ["nombre", "rfc", "regimen_fiscal_codigo", "contador", "resico_policy", "activo"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["contador"].queryset = Contador.objects.filter(activo=True).order_by("nombre")
+        if self.instance and self.instance.pk and self.instance.regimen_fiscal_codigo:
+            self.initial["regimen_fiscal_codigo"] = self.instance.regimen_fiscal_codigo
+
+    def save(self, commit=True):
+        obj = super().save(commit=False)
+        code = self.cleaned_data.get("regimen_fiscal_codigo", "") or ""
+        obj.regimen_fiscal_codigo = code
+        obj.regimen_fiscal = SAT_REGIMENES_MAP.get(code, code)
+        if commit:
+            obj.save()
+        return obj
 
 
 class CompraRegistrarFacturaForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Compra
-        fields = ["factura", "uuid_factura", "estatus_factura", "contador", "correo"]
+        fields = ["uuid_factura", "estatus_factura"]
         labels = {
-            "factura": "Nombre de quien factura",
             "uuid_factura": "UUID de factura",
-            "correo": "Correo contador",
         }
 
 
@@ -319,6 +540,36 @@ class DocumentoCompraForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = DocumentoCompra
         fields = ["etapa", "descripcion", "archivo"]
+
+
+class DeduccionForm(BootstrapFormMixin, forms.ModelForm):
+    class Meta:
+        model = Deduccion
+        fields = ["concepto", "monto", "moneda", "notas"]
+
+
+class CancelarCompraForm(BootstrapFormMixin, forms.Form):
+    motivo_cancelacion = forms.CharField(
+        required=True,
+        widget=forms.Textarea(attrs={"rows": 3}),
+        label="Motivo de cancelación",
+    )
+    admin_password = forms.CharField(
+        required=True,
+        widget=forms.PasswordInput(render_value=False),
+        label="Confirmar contraseña de admin",
+    )
+
+
+class CompraBankConfirmationForm(BootstrapFormMixin, forms.ModelForm):
+    class Meta:
+        model = Compra
+        fields = ["bank_account_confirmed", "bank_confirmation_source", "bank_confirmation_notes"]
+        labels = {
+            "bank_account_confirmed": "Cuenta bancaria confirmada",
+            "bank_confirmation_source": "Fuente de confirmación (WhatsApp/llamada)",
+            "bank_confirmation_notes": "Notas de confirmación",
+        }
 
 
 class PagoCompraForm(BootstrapFormMixin, forms.ModelForm):
@@ -346,6 +597,24 @@ class CompraDivisionEstadoForm(BootstrapFormMixin, forms.ModelForm):
         model = Compra
         fields = ["division_revisada"]
         labels = {"division_revisada": "Division revisada/completa"}
+
+
+class ImportComprasExcelForm(BootstrapFormMixin, forms.Form):
+    archivo = forms.FileField(label="Archivo Excel de algodon.net")
+    conflict_policy = forms.ChoiceField(
+        label="Si hay conflicto de compra existente",
+        choices=[
+            ("ask", "Mostrar conflicto y no sobrescribir"),
+            ("keep_existing", "Conservar compra existente"),
+            ("overwrite", "Sobrescribir con nuevo registro"),
+        ],
+        initial="ask",
+        required=True,
+    )
+
+
+class ImportAnticiposExcelForm(BootstrapFormMixin, forms.Form):
+    archivo = forms.FileField(label="Archivo Excel de anticipos")
 
 
 class CompraDivisionCreateForm(BootstrapFormMixin, forms.Form):

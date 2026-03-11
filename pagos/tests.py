@@ -12,6 +12,7 @@ from .models import (
     Productor,
     TipoCambio,
 )
+from .services import parse_and_validate_cfdi_xml
 
 
 class PagosFlowTests(TestCase):
@@ -147,3 +148,21 @@ class PagosFlowTests(TestCase):
         self.assertEqual(self.compra.total_pagado_registrado, 0)
         self.assertEqual(self.compra.saldo_por_pagar, 1000)
         self.assertEqual(self.compra.estatus_de_pago, "PENDIENTE")
+
+    def test_parse_cfdi_xml_basico(self):
+        xml = b'''<?xml version="1.0" encoding="UTF-8"?>
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Moneda="USD" MetodoPago="PUE">
+  <cfdi:Emisor Rfc="AAA010101AAA" />
+  <cfdi:Receptor Rfc="BBB010101BBB" UsoCFDI="G01" />
+  <cfdi:Impuestos>
+    <cfdi:Traslados>
+      <cfdi:Traslado Impuesto="002" TasaOCuota="0.000000" />
+    </cfdi:Traslados>
+  </cfdi:Impuestos>
+  <cfdi:Complemento>
+    <tfd:TimbreFiscalDigital UUID="123e4567-e89b-12d3-a456-426614174000" />
+  </cfdi:Complemento>
+</cfdi:Comprobante>'''
+        result = parse_and_validate_cfdi_xml(xml, expected_rfc_receptor="BBB010101BBB", expected_moneda="USD")
+        self.assertTrue(result["valid"])
+        self.assertEqual(result["uuid"], "123e4567-e89b-12d3-a456-426614174000")

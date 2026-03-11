@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Validación factura Compra {{ compra.numero_compra }}{% endblock %}
+{% block content %}
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">Validación de factura · Compra {{ compra.numero_compra }}</h5>
+    <div class="d-flex gap-2">
+      <form method="post">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-outline-dark" type="submit">Revalidar XML</button>
+      </form>
+      <a class="btn btn-sm btn-outline-secondary" href="/compras/{{ compra.id }}/flujo/?step=revisar_factura">Volver a revisar factura</a>
+    </div>
+  </div>
+  <div class="card-body">
+    {% if ultima %}
+      {% if ultima.valid %}
+      <div class="alert alert-success py-2"><strong>✅ APROBADA PARA CONTABILIDAD</strong></div>
+      {% else %}
+      <div class="alert alert-danger py-2"><strong>❌ BLOQUEADA</strong> · {{ ultima.blocked_reason|default:"Revisar reglas" }}</div>
+      {% endif %}
+    {% else %}
+      <div class="alert alert-warning py-2">Aún no hay validaciones de XML registradas.</div>
+    {% endif %}
+
+    {% if ultima %}
+    <h6>Expected vs Actual</h6>
+    <div class="table-responsive mb-3">
+      <table class="table table-sm align-middle">
+        <thead><tr><th>Regla</th><th>Esperado</th><th>XML</th><th>Resultado</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>RFC receptor</td>
+            <td>{{ compra.expected_rfc_receptor|default:"(global)" }}</td>
+            <td>{{ ultima.rfc_receptor|default:"-" }}</td>
+            <td>{% if not compra.expected_rfc_receptor or compra.expected_rfc_receptor|upper == ultima.rfc_receptor|upper %}✅{% else %}❌{% endif %}</td>
+          </tr>
+          <tr>
+            <td>Moneda</td>
+            <td>{{ compra.expected_moneda|default:"(sin validar)" }}</td>
+            <td>{{ ultima.moneda|default:"-" }}</td>
+            <td>{% if not compra.expected_moneda or compra.expected_moneda|upper == ultima.moneda|upper %}✅{% else %}❌{% endif %}</td>
+          </tr>
+          <tr>
+            <td>Forma pago</td>
+            <td>{{ compra.expected_forma_pago|default:"(sin validar)" }}</td>
+            <td>{{ ultima.raw_result.forma_pago|default:"-" }}</td>
+            <td>{% if not compra.expected_forma_pago or compra.expected_forma_pago|upper == ultima.raw_result.forma_pago|upper %}✅{% else %}❌{% endif %}</td>
+          </tr>
+          <tr>
+            <td>Método pago</td>
+            <td>{{ compra.expected_metodo_pago|default:"(sin validar)" }}</td>
+            <td>{{ ultima.metodo_pago|default:"-" }}</td>
+            <td>{% if not compra.expected_metodo_pago or compra.expected_metodo_pago|upper == ultima.metodo_pago|upper %}✅{% else %}❌{% endif %}</td>
+          </tr>
+          <tr>
+            <td>Uso CFDI</td>
+            <td>{{ compra.expected_uso_cfdi|default:"(sin validar)" }}</td>
+            <td>{{ ultima.uso_cfdi|default:"-" }}</td>
+            <td>{% if not compra.expected_uso_cfdi or compra.expected_uso_cfdi|upper == ultima.uso_cfdi|upper %}✅{% else %}❌{% endif %}</td>
+          </tr>
+          <tr>
+            <td>IVA tasa</td>
+            <td>{{ ultima.raw_result.expected_impuesto_trasladado|default:"según configuración" }}</td>
+            <td>{{ ultima.iva_tasa|default:"-" }}</td>
+            <td>{% if ultima.valid or 'IVA' not in ultima.blocked_reason %}✅{% else %}❌{% endif %}</td>
+          </tr>
+          <tr>
+            <td>RESICO (leyenda/retención)</td>
+            <td>{{ ultima.raw_result.resico_policy_used|default:"AUTO" }}</td>
+            <td>{% if ultima.raw_result.has_exencion_leyenda %}Leyenda detectada{% else %}Sin leyenda{% endif %} · ISR={{ ultima.isr_retencion }}</td>
+            <td>{% if ultima.valid or 'RESICO' not in ultima.blocked_reason %}✅{% else %}❌{% endif %}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if anterior and ultima %}
+    <div class="small text-muted mb-3">
+      Último cambio: {% if ultima.valid != anterior.valid %}estatus cambió{% else %}sin cambio de estatus{% endif %}
+    </div>
+    {% endif %}
+
+    <h6>Historial</h6>
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead><tr><th>Fecha</th><th>UUID</th><th>Estatus</th><th>Motivo</th></tr></thead>
+        <tbody>
+          {% for v in validaciones %}
+          <tr>
+            <td>{{ v.created_at }}</td>
+            <td>{{ v.uuid|default:"-" }}</td>
+            <td>{% if v.valid %}<span class="badge text-bg-success">OK</span>{% else %}<span class="badge text-bg-danger">Bloqueada</span>{% endif %}</td>
+            <td class="small">{{ v.blocked_reason|default:"-" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="text-center">Sin registros.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

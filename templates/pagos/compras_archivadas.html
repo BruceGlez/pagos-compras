@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% load pagos_extras %}
+{% block title %}Compras archivadas{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">Compras archivadas/canceladas</h5>
+    <a class="btn btn-outline-secondary btn-sm" href="/compras/">Volver a compras activas</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-striped mb-0">
+      <thead>
+        <tr>
+          <th>Compra</th>
+          <th>Fecha LIQ</th>
+          <th>Productor</th>
+          <th>Total DLS</th>
+          <th>Motivo cancelación</th>
+          <th>Actualizada</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in compras %}
+        <tr>
+          <td>{{ c.numero_compra }}</td>
+          <td>{{ c.fecha_liq }}</td>
+          <td>{{ c.productor.nombre }}</td>
+          <td>{{ c.compra_en_libras|money }}</td>
+          <td>{{ c.motivo_cancelacion|default:"-" }}</td>
+          <td>{{ c.updated_at }}</td>
+          <td><a class="btn btn-sm btn-outline-primary" href="/compras/{{ c.id }}/flujo/?step={{ c.flujo_step_default }}">Abrir</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-center py-4">Sin compras archivadas.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Configuración de validación XML{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header"><h5 class="mb-0">Configuración de validación XML</h5></div>
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button class="btn btn-primary" type="submit">Guardar configuración</button>
+        </form>
+        <p class="small text-muted mt-3 mb-0">
+            Esta regla se usa como fallback global cuando la compra no define un RFC receptor específico.
+        </p>
+    </div>
+</div>
+{% endblock %}

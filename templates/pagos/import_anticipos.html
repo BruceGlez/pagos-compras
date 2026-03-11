@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Importar anticipos{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">Importar anticipos desde Excel</h5>
+    <a class="btn btn-outline-secondary btn-sm" href="/anticipos/">Volver</a>
+  </div>
+  <div class="card-body">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="d-flex gap-2">
+        <button class="btn btn-outline-primary btn-sm" type="submit" name="action" value="preview">Previsualizar</button>
+        <button class="btn btn-primary btn-sm" type="submit" name="action" value="import">Confirmar importación</button>
+      </div>
+    </form>
+
+    {% if preview_rows %}
+    <hr>
+    <h6>Vista previa ({{ preview_rows|length }} filas)</h6>
+    <div class="table-responsive">
+      <table class="table table-sm table-striped">
+        <thead><tr><th>Fila</th><th>#Anticipo</th><th>Fecha</th><th>Productor</th><th>Persona factura</th><th>Factura</th><th>UUID nota crédito</th><th>Monto</th><th>Moneda</th></tr></thead>
+        <tbody>
+          {% for r in preview_rows %}
+          <tr>
+            <td>{{ r.row_number }}</td>
+            <td>{{ r.numero_anticipo }}</td>
+            <td>{{ r.fecha_pago }}</td>
+            <td>{{ r.productor }}</td>
+            <td>{{ r.persona_que_factura }}</td>
+            <td>{{ r.factura }}</td>
+            <td>{{ r.uuid_nota_credito }}</td>
+            <td>{{ r.monto }}</td>
+            <td>{{ r.moneda }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if result %}
+    <hr>
+    <ul>
+      <li>Creados: <strong>{{ result.created }}</strong></li>
+      <li>Duplicados: <strong>{{ result.duplicates }}</strong></li>
+      <li>Errores: <strong>{{ result.error_count }}</strong></li>
+    </ul>
+    {% if import_run %}
+    <h6>Bitácora últimas 30 filas</h6>
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead><tr><th>Fila</th><th>Status</th><th>Productor</th><th>Mensaje</th></tr></thead>
+        <tbody>
+          {% for r in import_run.rows.all|slice:":30" %}
+          <tr><td>{{ r.row_number }}</td><td>{{ r.status }}</td><td>{{ r.productor_nombre }}</td><td>{{ r.message }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

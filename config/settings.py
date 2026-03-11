@@ -111,6 +111,21 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-BANXICO_TOKEN = os.getenv("BANXICO_TOKEN", "")
+_BANXICO_FILE = BASE_DIR.parent / ".secrets" / "banxico.env"
+_banxico_token_file = ""
+if _BANXICO_FILE.exists():
+    for _line in _BANXICO_FILE.read_text().splitlines():
+        if _line.strip().startswith("BANXICO_TOKEN="):
+            _banxico_token_file = _line.split("=", 1)[1].strip()
+            break
+
+BANXICO_TOKEN = os.getenv("BANXICO_TOKEN") or _banxico_token_file or ""
 BANXICO_SERIE_ID = os.getenv("BANXICO_SERIE_ID", "SF60653")
 BANXICO_TC_OBJETIVO = os.getenv("BANXICO_TC_OBJETIVO", "publicacion_dof")
+
+# Reglas globales CFDI
+CFDI_RFC_RECEPTOR_GLOBAL = os.getenv("CFDI_RFC_RECEPTOR_GLOBAL", "UAM140522Q51").strip().upper()
+
+LOGIN_URL = "/accounts/login/"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/accounts/login/"

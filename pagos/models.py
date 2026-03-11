@@ -50,10 +50,29 @@ class DocumentoEtapaChoices(models.TextChoices):
     OTRO = "otro", _("Otro")
 
 
+class WorkflowStateChoices(models.TextChoices):
+    IMPORTED = "IMPORTED", _("Imported")
+    DEBT_CALCULATED = "DEBT_CALCULATED", _("Debt Calculated")
+    WAITING_INVOICE = "WAITING_INVOICE", _("Waiting Invoice")
+    INVOICE_RECEIVED = "INVOICE_RECEIVED", _("Invoice Received")
+    INVOICE_VALID = "INVOICE_VALID", _("Invoice Valid")
+    INVOICE_BLOCKED = "INVOICE_BLOCKED", _("Invoice Blocked")
+    WAITING_BANK_CONFIRMATION = "WAITING_BANK_CONFIRMATION", _("Waiting Bank Confirmation")
+    READY_TO_PAY = "READY_TO_PAY", _("Ready To Pay")
+    PAID = "PAID", _("Paid")
+    ARCHIVED = "ARCHIVED", _("Archived")
+
+
 class Productor(TimestampedModel):
     codigo = models.CharField(max_length=40, unique=True)
     nombre = models.CharField(max_length=200)
     regimen_fiscal = models.CharField(max_length=120, blank=True)
+    regimen_fiscal_codigo = models.CharField(max_length=3, blank=True, db_index=True)
+    microsip_cliente_nombre = models.CharField(max_length=240, blank=True)
+    microsip_cliente_id = models.CharField(max_length=40, blank=True)
+    contador = models.ForeignKey(
+        "Contador", on_delete=models.SET_NULL, null=True, blank=True, related_name="productores"
+    )
     cuenta_productor = models.CharField(max_length=80, blank=True)
     telefono = models.CharField(max_length=30, blank=True)
     correo_facturas = models.EmailField(blank=True)
@@ -84,6 +103,46 @@ class Productor(TimestampedModel):
         return super().save(*args, **kwargs)
 
 
+class Contador(TimestampedModel):
+    nombre = models.CharField(max_length=200)
+    telefono = models.CharField(max_length=40, blank=True)
+    email = models.EmailField(blank=True)
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+
+class PersonaFactura(TimestampedModel):
+    class ResicoPolicyChoices(models.TextChoices):
+        AUTO = "AUTO", _("Auto (retención 1.25% o leyenda)")
+        RETENCION_125 = "RETENCION_125", _("Requiere retención ISR 1.25%")
+        EXENCION_LEYENDA = "EXENCION_LEYENDA", _("Requiere leyenda de exención")
+
+    nombre = models.CharField(max_length=200, unique=True)
+    regimen_fiscal = models.CharField(max_length=120, blank=True)
+    regimen_fiscal_codigo = models.CharField(max_length=3, blank=True, db_index=True)
+    rfc = models.CharField(max_length=20, blank=True)
+    contador = models.ForeignKey(
+        "Contador", on_delete=models.SET_NULL, null=True, blank=True, related_name="entidades_facturadoras"
+    )
+    resico_policy = models.CharField(
+        max_length=30,
+        choices=ResicoPolicyChoices.choices,
+        default=ResicoPolicyChoices.AUTO,
+    )
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+
 class TipoCambio(TimestampedModel):
     fecha = models.DateField(unique=True)
     tc = models.DecimalField(max_digits=12, decimal_places=4, default=0)
@@ -103,6 +162,13 @@ class Anticipo(TimestampedModel):
     fecha_pago = models.DateField(default=timezone.localdate)
     productor = models.ForeignKey(
         Productor, on_delete=models.PROTECT, related_name="anticipos"
+    )
+    persona_facturadora = models.ForeignKey(
+        PersonaFactura,
+        on_delete=models.PROTECT,
+        related_name="anticipos",
+        null=True,
+        blank=True,
     )
     persona_que_factura = models.CharField(max_length=200, blank=True)
     factura = models.CharField(max_length=80, blank=True, help_text="UUID factura")
@@ -156,6 +222,9 @@ class Anticipo(TimestampedModel):
         )
 
     def save(self, *args, **kwargs):
+        if self.persona_facturadora and not self.persona_que_factura:
+            self.persona_que_factura = self.persona_facturadora.nombre
+
         if not self.numero_anticipo:
             for _ in range(5):
                 last = Anticipo.objects.order_by("-numero_anticipo").first()
@@ -180,6 +249,9 @@ class Compra(TimestampedModel):
     regimen_fiscal = models.CharField(max_length=120, blank=True)
     productor = models.ForeignKey(
         Productor, on_delete=models.PROTECT, related_name="compras"
+    )
+    facturador = models.ForeignKey(
+        PersonaFactura, on_delete=models.SET_NULL, null=True, blank=True, related_name="compras_facturadas"
     )
     parent_compra = models.ForeignKey(
         "self",
@@ -230,6 +302,11 @@ class Compra(TimestampedModel):
     moneda = models.CharField(
         max_length=20, choices=MonedaChoices.choices, default=MonedaChoices.DOLARES
     )
+    expected_moneda = models.CharField(max_length=10, blank=True, default="")
+    expected_metodo_pago = models.CharField(max_length=10, blank=True, default="")
+    expected_forma_pago = models.CharField(max_length=10, blank=True, default="")
+    expected_uso_cfdi = models.CharField(max_length=10, blank=True, default="")
+    expected_rfc_receptor = models.CharField(max_length=20, blank=True, default="")
     total_en_pesos = models.DecimalField(max_digits=16, decimal_places=4, default=0)
     cuenta_productor = models.CharField(max_length=80, blank=True)
     estatus_de_pago = models.CharField(
@@ -245,6 +322,18 @@ class Compra(TimestampedModel):
     deudas_revisadas = models.BooleanField(default=False)
     division_revisada = models.BooleanField(default=False)
     expediente_completo = models.BooleanField(default=False)
+    cancelada = models.BooleanField(default=False)
+    motivo_cancelacion = models.TextField(blank=True)
+    bank_account_confirmed = models.BooleanField(default=False)
+    bank_confirmed_at = models.DateTimeField(null=True, blank=True)
+    bank_confirmation_source = models.CharField(max_length=40, blank=True)
+    bank_confirmation_notes = models.TextField(blank=True)
+    workflow_state = models.CharField(
+        max_length=40,
+        choices=WorkflowStateChoices.choices,
+        default=WorkflowStateChoices.IMPORTED,
+        db_index=True,
+    )
 
     class Meta:
         ordering = ["-fecha_liq", "-id"]
@@ -266,7 +355,9 @@ class Compra(TimestampedModel):
     @property
     def saldo_por_pagar(self):
         objetivo = self.compra_en_libras or Decimal("0")
-        return objetivo - self.total_pagado_vigente - self.total_aplicado_anticipos
+        deuda = self.total_deuda_en_dls or Decimal("0")
+        resico = self.retencion_resico or Decimal("0")
+        return objetivo - self.total_pagado_vigente - self.total_aplicado_anticipos - deuda - resico
 
     @property
     def total_pagado_registrado(self):
@@ -409,7 +500,9 @@ class Compra(TimestampedModel):
         if not self.deudas_revisadas:
             return "deudas"
         if not self.solicitud_factura_enviada:
-            return "facturas"
+            return "solicitar_factura"
+        if not self.uuid_factura:
+            return "revisar_factura"
         if not self.pago_registrado:
             return "pago"
         return "completo"
@@ -420,7 +513,8 @@ class Compra(TimestampedModel):
             "captura": "Completar captura",
             "anticipos": "Revisar anticipos",
             "deudas": "Revisar deudas",
-            "facturas": "Solicitar/registrar facturas",
+            "solicitar_factura": "Solicitar factura",
+            "revisar_factura": "Revisar factura",
             "pago": "Registrar pago",
             "completo": "Completado",
         }
@@ -429,10 +523,11 @@ class Compra(TimestampedModel):
     @property
     def flujo_progress(self):
         steps = {
-            "captura": 20,
-            "anticipos": 40,
-            "deudas": 60,
-            "facturas": 80,
+            "captura": 15,
+            "anticipos": 30,
+            "deudas": 50,
+            "solicitar_factura": 70,
+            "revisar_factura": 85,
             "pago": 95,
             "completo": 100,
         }
@@ -447,6 +542,20 @@ class Compra(TimestampedModel):
     def uuid_factura_faltante(self):
         # Recordatorio no bloqueante: se solicito factura pero aun no llega UUID.
         return bool(self.solicitud_factura_enviada and not self.uuid_factura)
+
+    def set_workflow_state(self, new_state: str, reason: str = "", actor: str = "system"):
+        previous = self.workflow_state
+        if previous == new_state:
+            return
+        self.workflow_state = new_state
+        self.save(update_fields=["workflow_state", "updated_at"])
+        WorkflowEvent.objects.create(
+            compra=self,
+            from_state=previous,
+            to_state=new_state,
+            actor=actor,
+            reason=reason,
+        )
 
 
 class AplicacionAnticipo(TimestampedModel):
@@ -560,3 +669,107 @@ class PagoCompra(TimestampedModel):
         compra.actualizar_estatus_pago_desde_registros()
         compra.save(update_fields=["pago", "estatus_de_pago", "updated_at"])
         return result
+
+
+class DebtSnapshot(TimestampedModel):
+    compra = models.ForeignKey(Compra, on_delete=models.CASCADE, related_name="debt_snapshots")
+    fuente = models.CharField(max_length=60, default="microsip")
+    total_usd = models.DecimalField(max_digits=16, decimal_places=4, default=0)
+    total_mxn = models.DecimalField(max_digits=16, decimal_places=4, default=0)
+    detalle_json = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+
+class Deduccion(TimestampedModel):
+    compra = models.ForeignKey(Compra, on_delete=models.CASCADE, related_name="deducciones")
+    concepto = models.CharField(max_length=120)
+    monto = models.DecimalField(max_digits=16, decimal_places=4)
+    moneda = models.CharField(max_length=20, choices=MonedaChoices.choices, default=MonedaChoices.DOLARES)
+    fuente = models.CharField(max_length=30, default="manual")
+    notas = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+
+class XmlValidationConfig(TimestampedModel):
+    class IvaPolicyChoices(models.TextChoices):
+        ANY = "ANY", _("Sin validar")
+        IVA_0 = "0", _("0%")
+        IVA_16 = "16", _("16%")
+
+    key = models.CharField(max_length=32, unique=True, default="default")
+    global_rfc_receptor = models.CharField(max_length=20, blank=True, default="")
+    global_regimen_fiscal_receptor = models.CharField(max_length=10, blank=True, default="")
+    global_codigo_fiscal_receptor = models.CharField(max_length=10, blank=True, default="")
+    global_nombre_receptor = models.CharField(max_length=200, blank=True, default="")
+    global_efecto_comprobante = models.CharField(max_length=4, blank=True, default="")
+    global_impuesto_trasladado = models.CharField(
+        max_length=8,
+        choices=IvaPolicyChoices.choices,
+        default=IvaPolicyChoices.ANY,
+    )
+
+    class Meta:
+        verbose_name = "Configuración validación XML"
+        verbose_name_plural = "Configuración validación XML"
+
+    @classmethod
+    def get_default(cls):
+        obj, _ = cls.objects.get_or_create(key="default")
+        return obj
+
+
+class WorkflowEvent(TimestampedModel):
+    compra = models.ForeignKey(Compra, on_delete=models.CASCADE, related_name="workflow_events")
+    from_state = models.CharField(max_length=40, blank=True)
+    to_state = models.CharField(max_length=40)
+    actor = models.CharField(max_length=120, default="system")
+    reason = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+
+class InvoiceValidationResult(TimestampedModel):
+    compra = models.ForeignKey(Compra, on_delete=models.CASCADE, related_name="invoice_validations")
+    uuid = models.CharField(max_length=80, blank=True)
+    rfc_emisor = models.CharField(max_length=20, blank=True)
+    rfc_receptor = models.CharField(max_length=20, blank=True)
+    uso_cfdi = models.CharField(max_length=20, blank=True)
+    metodo_pago = models.CharField(max_length=20, blank=True)
+    moneda = models.CharField(max_length=20, blank=True)
+    iva_tasa = models.CharField(max_length=20, blank=True)
+    isr_retencion = models.DecimalField(max_digits=12, decimal_places=6, default=0)
+    valid = models.BooleanField(default=False)
+    blocked_reason = models.TextField(blank=True)
+    raw_result = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+
+class ImportRun(TimestampedModel):
+    source_name = models.CharField(max_length=255)
+    dry_run = models.BooleanField(default=False)
+    created_count = models.IntegerField(default=0)
+    duplicate_count = models.IntegerField(default=0)
+    division_count = models.IntegerField(default=0)
+    error_count = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+
+class ImportRowLog(TimestampedModel):
+    run = models.ForeignKey(ImportRun, on_delete=models.CASCADE, related_name="rows")
+    row_number = models.IntegerField()
+    status = models.CharField(max_length=20, default="ok")
+    message = models.TextField(blank=True)
+    compra_numero = models.IntegerField(null=True, blank=True)
+    productor_nombre = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ["row_number", "id"]

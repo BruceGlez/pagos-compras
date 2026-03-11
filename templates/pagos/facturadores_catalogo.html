@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Catálogo de Entidades que Facturan{% endblock %}
+{% block content %}
+<div class="row g-3">
+    <div class="col-lg-5">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0">Nueva Entidad Facturadora</h5></div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <button class="btn btn-primary" type="submit">Guardar entidad</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Catálogo</h5>
+                <form method="get" class="d-flex gap-2">
+                    <input type="text" name="q" value="{{ q }}" class="form-control form-control-sm" placeholder="Buscar entidad/RFC">
+                    <button class="btn btn-sm btn-outline-secondary" type="submit">Buscar</button>
+                </form>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-striped mb-0">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>RFC</th>
+                            <th>Régimen</th>
+                            <th>Código SAT</th>
+                            <th>Contador</th>
+                            <th>Política RESICO</th>
+                            <th>Activo</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in facturadores %}
+                        <tr>
+                            <td>{{ f.nombre }}</td>
+                            <td>{{ f.rfc|default:"-" }}</td>
+                            <td>{{ f.regimen_fiscal|default:"-" }}</td>
+                            <td>{{ f.regimen_fiscal_codigo|default:"-" }}</td>
+                            <td>{{ f.contador.nombre|default:"-" }}</td>
+                            <td>{{ f.get_resico_policy_display }}</td>
+                            <td>{% if f.activo %}Sí{% else %}No{% endif %}</td>
+                            <td><a class="btn btn-outline-primary btn-sm" href="/facturadores/{{ f.id }}/editar/">Editar</a></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="8" class="text-center py-4">Sin entidades facturadoras.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

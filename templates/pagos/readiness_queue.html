@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% load pagos_extras %}
+{% block title %}Payment Readiness Queue{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0">Payment Readiness Queue</h5>
+  <a class="btn btn-outline-secondary btn-sm" href="/compras/">Ver compras operativas</a>
+</div>
+
+<div class="row g-2 mb-3">
+  <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=WAITING_INVOICE"><strong>{{ counts.WAITING_INVOICE }}</strong><small>Waiting invoice</small></a></div>
+  <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=INVOICE_BLOCKED"><strong>{{ counts.INVOICE_BLOCKED }}</strong><small>Invoice blocked</small></a></div>
+  <div class="col-md-3"><a class="card card-body text-decoration-none" href="/queue/?state=WAITING_BANK_CONFIRMATION"><strong>{{ counts.WAITING_BANK_CONFIRMATION }}</strong><small>Waiting bank confirmation</small></a></div>
+  <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=READY_TO_PAY"><strong>{{ counts.READY_TO_PAY }}</strong><small>Ready to pay</small></a></div>
+  <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=PAID"><strong>{{ counts.PAID }}</strong><small>Paid</small></a></div>
+  <div class="col-md-1"><a class="card card-body text-decoration-none" href="/queue/"><strong>All</strong><small>Queue</small></a></div>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-striped mb-0">
+      <thead>
+        <tr>
+          <th>Compra</th>
+          <th>Fecha LIQ</th>
+          <th>Productor</th>
+          <th>State</th>
+          <th>Total DLS</th>
+          <th>Saldo</th>
+          <th>Acciones rápidas</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for compra in compras %}
+        <tr>
+          <td>{{ compra.numero_compra }}</td>
+          <td>{{ compra.fecha_liq }}</td>
+          <td>{{ compra.productor.nombre }}</td>
+          <td>
+            <span class="badge text-bg-info">{{ compra.workflow_state }}</span>
+            {% if compra.workflow_state == 'INVOICE_BLOCKED' and blocked_reasons|get_item:compra.id %}
+            <div class="small text-danger mt-1">{{ blocked_reasons|get_item:compra.id }}</div>
+            {% endif %}
+          </td>
+          <td class="text-nowrap">{{ compra.compra_en_libras|money }}</td>
+          <td class="text-nowrap">{{ compra.saldo_por_pagar|money }}</td>
+          <td>
+            <div class="d-flex flex-wrap gap-1">
+              <a class="btn btn-sm btn-outline-primary" href="/compras/{{ compra.id }}/flujo/?step={{ compra.flujo_step_default }}">Abrir</a>
+              <form method="post" action="/queue/{{ compra.id }}/action/">{% csrf_token %}<input type="hidden" name="action" value="bank_confirm"><button class="btn btn-sm btn-outline-secondary" type="submit">Confirmar banco</button></form>
+              <form method="post" action="/queue/{{ compra.id }}/action/">{% csrf_token %}<input type="hidden" name="action" value="mark_ready"><button class="btn btn-sm btn-outline-success" type="submit">Marcar ready</button></form>
+              <form method="post" action="/queue/{{ compra.id }}/action/">{% csrf_token %}<input type="hidden" name="action" value="reopen_invoice"><button class="btn btn-sm btn-outline-warning" type="submit">Reabrir factura</button></form>
+            </div>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="text-center py-4">Sin compras en esta categoria.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

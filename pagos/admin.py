@@ -5,9 +5,18 @@ from .models import (
     Anticipo,
     AplicacionAnticipo,
     Compra,
+    Contador,
+    DebtSnapshot,
+    Deduccion,
     DocumentoCompra,
+    ImportRowLog,
+    ImportRun,
+    InvoiceValidationResult,
+    PagoCompra,
+    PersonaFactura,
     Productor,
     TipoCambio,
+    WorkflowEvent,
 )
 
 
@@ -16,6 +25,20 @@ class ProductorAdmin(admin.ModelAdmin):
     list_display = ("codigo", "nombre", "telefono", "activo")
     list_filter = ("activo",)
     search_fields = ("codigo", "nombre")
+
+
+@admin.register(Contador)
+class ContadorAdmin(admin.ModelAdmin):
+    list_display = ("nombre", "email", "telefono", "activo")
+    list_filter = ("activo",)
+    search_fields = ("nombre", "email")
+
+
+@admin.register(PersonaFactura)
+class PersonaFacturaAdmin(admin.ModelAdmin):
+    list_display = ("nombre", "rfc", "regimen_fiscal_codigo", "activo", "created_at")
+    list_filter = ("activo", "regimen_fiscal_codigo")
+    search_fields = ("nombre", "rfc")
 
 
 @admin.register(TipoCambio)
@@ -59,6 +82,7 @@ class CompraAdmin(admin.ModelAdmin):
         "fecha_liq",
         "pacas",
         "pago",
+        "cancelada",
         "flujo_label",
         "saldo_por_pagar_display",
     )
@@ -85,3 +109,52 @@ class DocumentoCompraAdmin(admin.ModelAdmin):
     list_display = ("id", "compra", "etapa", "descripcion", "created_at")
     list_filter = ("etapa", "created_at")
     search_fields = ("compra__numero_compra", "descripcion")
+
+
+@admin.register(PagoCompra)
+class PagoCompraAdmin(admin.ModelAdmin):
+    list_display = ("id", "compra", "fecha_pago", "monto", "moneda", "referencia")
+    list_filter = ("fecha_pago", "moneda")
+    search_fields = ("compra__numero_compra", "referencia", "compra__productor__nombre")
+
+
+@admin.register(DebtSnapshot)
+class DebtSnapshotAdmin(admin.ModelAdmin):
+    list_display = ("id", "compra", "fuente", "total_usd", "total_mxn", "created_at")
+    list_filter = ("fuente", "created_at")
+    search_fields = ("compra__numero_compra", "compra__productor__nombre")
+
+
+@admin.register(Deduccion)
+class DeduccionAdmin(admin.ModelAdmin):
+    list_display = ("id", "compra", "concepto", "monto", "moneda", "fuente", "created_at")
+    list_filter = ("moneda", "fuente", "created_at")
+    search_fields = ("compra__numero_compra", "concepto", "compra__productor__nombre")
+
+
+@admin.register(WorkflowEvent)
+class WorkflowEventAdmin(admin.ModelAdmin):
+    list_display = ("id", "compra", "from_state", "to_state", "actor", "created_at")
+    list_filter = ("to_state", "actor", "created_at")
+    search_fields = ("compra__numero_compra", "compra__productor__nombre", "reason")
+
+
+@admin.register(InvoiceValidationResult)
+class InvoiceValidationResultAdmin(admin.ModelAdmin):
+    list_display = ("id", "compra", "uuid", "valid", "uso_cfdi", "moneda", "created_at")
+    list_filter = ("valid", "uso_cfdi", "moneda", "created_at")
+    search_fields = ("compra__numero_compra", "uuid", "rfc_emisor", "rfc_receptor", "blocked_reason")
+
+
+@admin.register(ImportRun)
+class ImportRunAdmin(admin.ModelAdmin):
+    list_display = ("id", "source_name", "dry_run", "created_count", "duplicate_count", "division_count", "error_count", "created_at")
+    list_filter = ("dry_run", "created_at")
+    search_fields = ("source_name",)
+
+
+@admin.register(ImportRowLog)
+class ImportRowLogAdmin(admin.ModelAdmin):
+    list_display = ("id", "run", "row_number", "status", "compra_numero", "productor_nombre")
+    list_filter = ("status", "created_at")
+    search_fields = ("message", "productor_nombre")

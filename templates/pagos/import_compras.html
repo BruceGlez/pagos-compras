@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Importar compras algodon.net{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">Importar compras desde Excel (algodon.net)</h5>
+    <a class="btn btn-outline-secondary btn-sm" href="/compras/">Volver</a>
+  </div>
+  <div class="card-body">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="d-flex gap-2 mb-2">
+        <button class="btn btn-outline-primary btn-sm" type="submit" name="action" value="preview">Previsualizar</button>
+        <button class="btn btn-primary btn-sm" type="submit" name="action" value="import">Confirmar importación</button>
+      </div>
+
+    {% if preview_rows %}
+    <hr>
+    <h6>Vista previa (primeras {{ preview_rows|length }} filas interpretadas)</h6>
+    <div class="table-responsive">
+      <table class="table table-sm table-striped">
+        <thead>
+          <tr>
+            <th>Compra</th><th>Productor</th><th>Fecha LIQ</th><th>Pacas</th><th>Total DLS</th><th>Division?</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in preview_rows %}
+          <tr>
+            <td>{{ r.compra }}</td>
+            <td>{{ r.productor }}</td>
+            <td>{{ r.fecha_liq }}</td>
+            <td>{{ r.pacas }}</td>
+            <td>{{ r.total_dls }}</td>
+            <td>{% if r.es_division_detectada %}Sí{% else %}-{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if conflict_rows %}
+    <hr>
+    <h6>Conflictos detectados (elige por fila qué conservar)</h6>
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered">
+        <thead>
+          <tr><th>Fila</th><th>Compra</th><th>Productor</th><th>Existente</th><th>Importado</th><th>Decisión</th></tr>
+        </thead>
+        <tbody>
+          {% for c in conflict_rows %}
+          <tr>
+            <td>{{ c.row_number }}</td>
+            <td>{{ c.numero_compra }}</td>
+            <td>{{ c.productor }}</td>
+            <td>Fecha {{ c.existing_fecha }} · Pacas {{ c.existing_pacas }} · Total {{ c.existing_total }}</td>
+            <td>Fecha {{ c.incoming_fecha }} · Pacas {{ c.incoming_pacas }} · Total {{ c.incoming_total }}</td>
+            <td>
+              <select class="form-select form-select-sm" name="conflict_row_{{ c.row_number }}">
+                <option value="keep_existing">Conservar existente</option>
+                <option value="overwrite">Sobrescribir con importado</option>
+              </select>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="small text-muted mb-0">Estas decisiones se aplican al presionar "Confirmar importación".</p>
+    </div>
+    {% endif %}
+    </form>
+
+    {% if result %}
+    <hr>
+    <h6>Resultado</h6>
+    <ul>
+      <li>Creadas: <strong>{{ result.created }}</strong></li>
+      <li>Actualizadas: <strong>{{ result.updated }}</strong></li>
+      <li>Duplicadas detectadas: <strong>{{ result.duplicates }}</strong></li>
+      <li>Divisiones creadas: <strong>{{ result.divisions_created }}</strong></li>
+      <li>Conflictos detectados: <strong>{{ result.conflict_count }}</strong></li>
+      <li>Errores por fila: <strong>{{ result.error_count }}</strong></li>
+    </ul>
+    {% if import_run %}
+    <h6>Bitácora (últimas 30 filas)</h6>
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead><tr><th>Fila</th><th>Status</th><th>Compra</th><th>Productor</th><th>Mensaje</th></tr></thead>
+        <tbody>
+          {% for r in import_run.rows.all|slice:":30" %}
+          <tr>
+            <td>{{ r.row_number }}</td>
+            <td>{{ r.status }}</td>
+            <td>{{ r.compra_numero }}</td>
+            <td>{{ r.productor_nombre }}</td>
+            <td>{{ r.message }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

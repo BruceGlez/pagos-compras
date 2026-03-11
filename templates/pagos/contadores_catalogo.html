@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Catalogo de Contadores{% endblock %}
+{% block content %}
+<div class="row g-3">
+    <div class="col-lg-5">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0">Nuevo Contador</h5></div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <button class="btn btn-primary" type="submit">Guardar contador</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Catalogo</h5>
+                <form method="get" class="d-flex gap-2">
+                    <input type="text" name="q" value="{{ q }}" class="form-control form-control-sm" placeholder="Buscar contador">
+                    <button class="btn btn-sm btn-outline-secondary" type="submit">Buscar</button>
+                </form>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-striped mb-0">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Email</th>
+                            <th>Teléfono</th>
+                            <th>Activo</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in contadores %}
+                        <tr>
+                            <td>{{ c.nombre }}</td>
+                            <td>{{ c.email|default:"-" }}</td>
+                            <td>{{ c.telefono|default:"-" }}</td>
+                            <td>{% if c.activo %}Si{% else %}No{% endif %}</td>
+                            <td><a class="btn btn-outline-primary btn-sm" href="/contadores/{{ c.id }}/editar/">Editar</a></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="text-center py-4">Sin contadores.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
