@@ -17,6 +17,9 @@ from .models import (
     PagoCompra,
     PersonaFactura,
     Productor,
+    ProductorCuentaBancaria,
+    FacturadorCuentaBancaria,
+    BeneficiaryValidationException,
     EmailTemplate,
     XmlValidationConfig,
     TipoCambio,
@@ -78,6 +81,32 @@ class ProductorForm(BootstrapFormMixin, forms.ModelForm):
         if commit:
             obj.save()
         return obj
+
+
+class ProductorCuentaBancariaForm(BootstrapFormMixin, forms.ModelForm):
+    class Meta:
+        model = ProductorCuentaBancaria
+        fields = ["banco", "titular", "cuenta", "clabe", "caratula_archivo", "activa", "predeterminada"]
+        labels = {
+            "predeterminada": "Usar como cuenta predeterminada",
+            "caratula_archivo": "Carátula bancaria (PDF/imagen)",
+        }
+
+
+class FacturadorCuentaBancariaForm(BootstrapFormMixin, forms.ModelForm):
+    class Meta:
+        model = FacturadorCuentaBancaria
+        fields = ["banco", "titular", "cuenta", "clabe", "caratula_archivo", "activa", "predeterminada"]
+        labels = {
+            "predeterminada": "Usar como cuenta predeterminada",
+            "caratula_archivo": "Carátula bancaria (PDF/imagen)",
+        }
+
+
+class BeneficiaryValidationExceptionForm(BootstrapFormMixin, forms.ModelForm):
+    class Meta:
+        model = BeneficiaryValidationException
+        fields = ["productor", "facturador", "emisor_rfc", "emisor_nombre", "account_holder", "reason", "active"]
 
 
 class ContadorForm(BootstrapFormMixin, forms.ModelForm):
@@ -311,6 +340,14 @@ class CompraFlujo2Form(BootstrapFormMixin, forms.ModelForm):
             "tipo_cambio_valor": "TC aplicado/pactado",
         }
 
+    def clean(self):
+        cleaned = super().clean()
+        tc_val = cleaned.get("tipo_cambio_valor")
+        # Si se captura TC pactado manual, respetarlo y evitar overwrite desde TC diario.
+        if tc_val not in (None, ""):
+            cleaned["tipo_cambio"] = None
+        return cleaned
+
 
 class CompraFlujoAnticiposForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
@@ -525,10 +562,17 @@ class PersonaFacturaQuickForm(BootstrapFormMixin, forms.ModelForm):
 class CompraRegistrarFacturaForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Compra
-        fields = ["uuid_factura", "estatus_factura"]
+        fields = ["uuid_factura"]
         labels = {
             "uuid_factura": "UUID de factura",
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Si ya se capturó UUID (normalmente desde XML), evitar sobreescritura accidental.
+        if self.instance and self.instance.pk and (self.instance.uuid_factura or "").strip():
+            self.fields["uuid_factura"].disabled = True
+            self.fields["uuid_factura"].help_text = "UUID autocompletado por validación XML."
 
 
 class CompraExpedienteForm(BootstrapFormMixin, forms.ModelForm):

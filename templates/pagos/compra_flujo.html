@@ -39,8 +39,11 @@
             {% endfor %}
         </div>
         <div class="mt-2"><strong>Paso pendiente:</strong> {{ compra.flujo_label }} ({{ compra.flujo_progress }}%)</div>
-        {% if compra.flujo_codigo == "completo" %}
-        <div class="mt-1 small text-muted">Compra completada. Puedes editar el pago o cualquier paso desde los botones.</div>
+        {% if compra.flujo_codigo == "completo" or compra.workflow_state == "PAID" %}
+        <div class="mt-2 alert alert-success py-2 mb-0">
+            <strong>✅ Flujo completado (100%)</strong> · Pago registrado correctamente.
+        </div>
+        <div class="mt-1 small text-muted">Puedes editar el pago o cualquier paso desde los botones si necesitas una corrección.</div>
         {% endif %}
         {% if compra.uuid_factura_faltante %}
         <div class="mt-2 alert alert-warning py-2 mb-0">
@@ -84,63 +87,195 @@
                 {% if current_step == "pago" and compra.uuid_factura_faltante %}
                 <p class="small text-warning mt-2 mb-0">Se puede registrar el pago, pero el UUID de factura sigue pendiente.</p>
                 {% endif %}
-                {% else %}
-                <p class="mb-0">No hay formulario pendiente.</p>
                 {% endif %}
 
                 {% if current_step == "pago" %}
                 <hr>
-                <h6>Confirmación bancaria (obligatoria antes de pagar)</h6>
-                <form method="post" class="mb-3">
-                    {% csrf_token %}
-                    <input type="hidden" name="flow_form" value="bank_confirm">
-                    {{ bank_form.as_p }}
-                    <button class="btn btn-outline-secondary btn-sm" type="submit">Guardar confirmación bancaria</button>
-                </form>
+                <div class="card mb-3">
+                    <div class="card-header"><strong>1) Confirmación bancaria</strong></div>
+                    <div class="card-body">
+                        <div class="small text-muted mb-2">
+                            Antes de pagar: confirma cuenta y agrega <strong>carátula bancaria</strong> en expediente (etapa Pago).
+                        </div>
+                        <div class="d-flex gap-2 mb-2 flex-wrap">
+                            {% if compra.facturador_id %}
+                            <a class="btn btn-outline-secondary btn-sm" href="/facturadores/{{ compra.facturador_id }}/cuentas/">Catálogo de cuentas de la entidad que factura</a>
+                            {% else %}
+                            <a class="btn btn-outline-secondary btn-sm" href="/productores/{{ compra.productor.id }}/cuentas/">Catálogo de cuentas del productor</a>
+                            {% endif %}
+                        </div>
+                        {% if compra.bank_account_confirmed and not edit_bank %}
+                        <div class="alert alert-success py-2 mb-2">
+                            <div><strong>Cuenta confirmada para pago</strong></div>
+                            <div class="small">Beneficiario: <strong>{{ confirmed_account.titular|default:"-" }}</strong></div>
+                            <div class="small">Banco: <strong>{{ confirmed_account.banco|default:"-" }}</strong></div>
+                            <div class="small">Cuenta: <strong>{{ confirmed_account.cuenta|default:compra.cuenta_productor|default:"-" }}</strong></div>
+                            <div class="small">CLABE: <strong>{{ confirmed_account.clabe|default:"-" }}</strong></div>
+                            <div class="small">Fecha: {{ compra.bank_confirmed_at|default:"-" }}</div>
+                            {% if compra.bank_confirmation_notes %}<div class="small text-muted">{{ compra.bank_confirmation_notes }}</div>{% endif %}
+                        </div>
+                        <a class="btn btn-outline-secondary btn-sm" href="/compras/{{ compra.id }}/flujo/?step=pago&edit_bank=1">Editar cuenta confirmada</a>
+                        {% else %}
+                        {% if compra.bank_account_confirmed %}
+                        <a class="btn btn-outline-secondary btn-sm mb-2" href="/compras/{{ compra.id }}/flujo/?step=pago">Volver a resumen de cuenta confirmada</a>
+                        {% endif %}
+                        <form method="post" class="mb-2">
+                            {% csrf_token %}
+                            <input type="hidden" name="flow_form" value="bank_confirm">
+                            {% if cuentas_facturador or cuentas_productor %}
+                            <p>
+                                <label class="form-label" for="id_bank_account_id">Cuenta para pago (catálogo)</label>
+                                <select id="id_bank_account_id" name="bank_account_id" class="form-select">
+                                    <option value="">(Seleccionar cuenta del catálogo)</option>
+                                    {% for c in cuentas_facturador %}
+                                    <option value="f:{{ c.id }}">{{ c.titular|default:"Sin titular" }} · {% if c.banco and 'BBVA' in c.banco|upper %}{{ c.cuenta }}{% else %}{{ c.clabe|default:c.cuenta }}{% endif %}</option>
+                                    {% endfor %}
+                                    {% for c in cuentas_productor %}
+                                    <option value="p:{{ c.id }}">{{ c.titular|default:"Sin titular" }} · {% if c.banco and 'BBVA' in c.banco|upper %}{{ c.cuenta }}{% else %}{{ c.clabe|default:c.cuenta }}{% endif %}</option>
+                                    {% endfor %}
+                                </select>
+                            </p>
+                            {% endif %}
+                            <p>
+                                <label class="form-label" for="id_bank_confirmation_note">Comentario (opcional)</label>
+                                <textarea id="id_bank_confirmation_note" name="bank_confirmation_note" class="form-control" rows="2" placeholder="Ej. Confirmado por WhatsApp con el proveedor"></textarea>
+                            </p>
+                            <button class="btn btn-outline-secondary btn-sm" type="submit">Confirmar cuenta para pago</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
 
-                <h6>Desglose saldo a pagar (USD)</h6>
+                <div class="card mb-3">
+                    <div class="card-header"><strong>2) Desglose saldo a pagar (USD)</strong></div>
+                    <div class="card-body">
                 <div class="small mb-2">
                     <div>Total compra: <strong>{{ payable.purchase_total|money }}</strong></div>
-                    <div>Menos anticipos: <strong>{{ payable.anticipos|money }}</strong></div>
-                    <div>Menos deuda USD: <strong>{{ payable.debt_usd|money }}</strong></div>
-                    <div>Menos deuda MXN convertida: <strong>{{ payable.debt_mxn_in_usd|money }}</strong></div>
-                    <div>Menos RESICO: <strong>{{ payable.resico|money }}</strong></div>
-                    <div>Menos deducciones manuales: <strong>{{ payable.manual_usd|money }}</strong></div>
-                    <div class="mt-1">Saldo a pagar: <strong>{{ payable.saldo_a_pagar|money }}</strong></div>
+                    <div>Total a descontar: <strong>{{ total_descontar_usd|money }}</strong></div>
+                    <div class="mt-1">Total a pagar: <strong>{{ total_pagar_usd|money }}</strong></div>
                 </div>
 
-                <h6>Deducciones manuales</h6>
-                <form method="post" class="mb-3">
-                    {% csrf_token %}
-                    <input type="hidden" name="flow_form" value="deduccion_add">
-                    {{ deduccion_form.as_p }}
-                    <button class="btn btn-outline-warning btn-sm" type="submit">Agregar deducción</button>
-                </form>
-                <ul class="list-group mb-3">
-                    {% for d in deducciones %}
-                    <li class="list-group-item d-flex justify-content-between">
-                        <span>{{ d.concepto }} ({{ d.moneda }})</span>
-                        <strong>{{ d.monto|money }}</strong>
-                    </li>
-                    {% empty %}
-                    <li class="list-group-item">Sin deducciones manuales.</li>
-                    {% endfor %}
-                </ul>
-
-                <h6>Registrar pago parcial</h6>
-                <form method="post" class="mb-3">
-                    {% csrf_token %}
-                    <input type="hidden" name="flow_form" value="pago_registrar">
-                    {{ pago_form.as_p }}
-                    <button class="btn btn-outline-primary btn-sm" type="submit">Agregar pago</button>
-                </form>
-
+                <hr>
+                <h6>Resumen de pendientes</h6>
                 <div class="small mb-2">
-                    <strong>Objetivo total (USD):</strong> {{ monto_objetivo_pago|money }} |
-                    <strong>Total pagado aplicado (USD):</strong> {{ total_pagado_registrado|money }} |
-                    <strong>Saldo (USD):</strong> {{ compra.saldo_por_pagar|money }}
+                    <div>Pendiente Microsip USD: <strong>{{ pending_microsip_usd|money }}</strong></div>
+                    <div>Pendiente Microsip MXN: <strong>{{ pending_microsip_mxn|money }}</strong></div>
+                    <div>Coberturas (USD): <strong>{{ pending_coberturas_usd|money }}</strong></div>
+                    <div>Otros pendientes (USD): <strong>{{ pending_otros_usd|money }}</strong></div>
                 </div>
-                <div class="table-responsive">
+                <a class="btn btn-outline-warning btn-sm" href="/compras/{{ compra.id }}/flujo/?step=deudas">Gestionar pendientes / deducciones</a>
+
+                    </div>
+                </div>
+
+                <div class="card mb-3">
+                    <div class="card-header"><strong>3) Registrar pago</strong></div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <div class="small text-muted">Validación de beneficiario</div>
+                            {% if beneficiary_validation.status == 'green' %}
+                            <span class="badge text-bg-success">Coincide (OK)</span>
+                            {% elif beneficiary_validation.status == 'yellow' %}
+                            <span class="badge text-bg-warning">Coincidencia parcial / excepción</span>
+                            {% else %}
+                            <span class="badge text-bg-danger">No coincide (bloquea pago)</span>
+                            {% endif %}
+                            <div class="small">Emisor XML: <strong>{{ beneficiary_validation.emisor|default:'-' }}</strong></div>
+                            <div class="small">Titular cuenta: <strong>{{ beneficiary_validation.holder|default:'-' }}</strong></div>
+                            <div class="small text-muted">{{ beneficiary_validation.reason }} · score={{ beneficiary_validation.score|default:'0' }}</div>
+                            <div class="small"><a href="/config/excepciones-beneficiario/">Administrar excepciones</a></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <h6>Comprobante de pago (expediente)</h6>
+                            {% if has_pago_comprobante and not edit_comprobante %}
+                            <div class="alert alert-success py-2 mb-2">
+                                <div><strong>Comprobante ya cargado</strong></div>
+                                <div class="small">{{ pago_doc_latest.descripcion|default:'Comprobante de pago' }} · {{ pago_doc_latest.created_at }}</div>
+                                <div class="small"><a href="{{ pago_doc_latest.archivo.url }}" target="_blank">Ver archivo</a></div>
+                            </div>
+                            <a class="btn btn-outline-secondary btn-sm" href="/compras/{{ compra.id }}/flujo/?step=pago&edit_comprobante=1">Subir otro / Editar comprobante</a>
+                            {% else %}
+                            {% if has_pago_comprobante %}
+                            <a class="btn btn-outline-secondary btn-sm mb-2" href="/compras/{{ compra.id }}/flujo/?step=pago">Volver al comprobante actual</a>
+                            {% endif %}
+                            <form method="post" enctype="multipart/form-data" class="mb-2">
+                                {% csrf_token %}
+                                <input type="hidden" name="flow_form" value="documento">
+                                <input type="hidden" name="doc-etapa" value="pago">
+                                <p>
+                                    <label class="form-label" for="id_doc-descripcion">Descripción</label>
+                                    <input id="id_doc-descripcion" name="doc-descripcion" class="form-control" value="Comprobante de pago">
+                                </p>
+                                <p>
+                                    <label class="form-label" for="id_doc-archivo">Archivo (PDF recomendado)</label>
+                                    <input id="id_doc-archivo" type="file" name="doc-archivo" class="form-control" required>
+                                </p>
+                                <button class="btn btn-outline-dark btn-sm" type="submit">Subir comprobante</button>
+                            </form>
+                            <div class="small text-muted">Al subir PDF, el sistema intentará leerlo y generar sugerencia automática de pago.</div>
+                            {% endif %}
+                        </div>
+
+                        {% if pago_pdf_preview %}
+                        <div class="alert alert-info py-2">
+                            <div><strong>Sugerencia desde comprobante PDF</strong></div>
+                            <div class="small">Fecha: {{ pago_pdf_preview.fecha_pago }} · Monto: {{ pago_pdf_preview.monto }} {{ pago_pdf_preview.moneda }}</div>
+                            <div class="small">Cuenta retiro: {{ pago_pdf_preview.cuenta_de_pago|default:'-' }} · Referencia: {{ pago_pdf_preview.referencia|default:'-' }}</div>
+                            <div class="d-flex gap-2 mt-2">
+                                <form method="post" class="mb-0">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="flow_form" value="pago_pdf_confirm">
+                                    <button class="btn btn-success btn-sm" type="submit">Confirmar pago desde comprobante</button>
+                                </form>
+                                <form method="post" class="mb-0">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="flow_form" value="pago_pdf_discard">
+                                    <button class="btn btn-outline-secondary btn-sm" type="submit">Descartar</button>
+                                </form>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <details class="mb-3">
+                            <summary class="mb-2"><strong>Modo manual (si no hay comprobante)</strong></summary>
+                            <form method="post" class="mt-2">
+                                {% csrf_token %}
+                                <input type="hidden" name="flow_form" value="pago_registrar">
+
+                                <p>
+                                    {{ pago_form.fecha_pago.label_tag }}
+                                    {{ pago_form.fecha_pago }}
+                                </p>
+                                <p>
+                                    {{ pago_form.monto.label_tag }}
+                                    {{ pago_form.monto }}
+                                </p>
+                                <p>
+                                    {{ pago_form.referencia.label_tag }}
+                                    {{ pago_form.referencia }}
+                                </p>
+                                <p>
+                                    {{ pago_form.notas.label_tag }}
+                                    {{ pago_form.notas }}
+                                </p>
+
+                                {% if beneficiary_validation.status == 'yellow' %}
+                                <p>
+                                    <label class="form-label" for="id_beneficiary_justification">Justificación excepción beneficiario (obligatoria)</label>
+                                    <textarea id="id_beneficiary_justification" name="beneficiary_justification" class="form-control" rows="2"></textarea>
+                                </p>
+                                {% endif %}
+                                <button class="btn btn-outline-primary btn-sm" type="submit">Agregar pago manual</button>
+                            </form>
+                        </details>
+
+                        <div class="small mb-2">
+                            <strong>Objetivo total (USD):</strong> {{ monto_objetivo_pago|money }} |
+                            <strong>Total pagado aplicado (USD):</strong> {{ total_pagado_registrado|money }} |
+                            <strong>Saldo (USD):</strong> {{ compra.saldo_por_pagar|money }}
+                        </div>
+                        <div class="table-responsive">
                     <table class="table table-sm align-middle">
                         <thead>
                             <tr>
@@ -174,6 +309,8 @@
                             {% endfor %}
                         </tbody>
                     </table>
+                </div>
+                    </div>
                 </div>
                 {% endif %}
 
@@ -233,6 +370,12 @@
 
                 {% if current_step == "revisar_factura" %}
                 <hr>
+                <h6>Estatus actual (solo lectura)</h6>
+                <div class="small mb-2 d-flex gap-2 flex-wrap">
+                    <span class="badge text-bg-secondary">Workflow: {{ compra.get_workflow_state_display }}</span>
+                    <span class="badge text-bg-secondary">Factura: {{ compra.get_estatus_factura_display }}</span>
+                    <span class="badge text-bg-secondary">Pago: {{ compra.get_estatus_de_pago_display }}</span>
+                </div>
                 <h6>Checklist de revisión de factura</h6>
                 <div class="small mb-2 d-flex gap-2 flex-wrap">
                     {% if factura_has_xml %}<span class="badge text-bg-success">XML recibido</span>{% else %}<span class="badge text-bg-warning">XML pendiente</span>{% endif %}
@@ -373,6 +516,7 @@
                     <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"factura","descripcion":"Factura PDF proveedor"}'>Factura PDF</button>
                     <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"factura","descripcion":"SAT PDF validado"}'>SAT validado</button>
                     <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"pago","descripcion":"Comprobante de pago"}'>Comprobante pago</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"pago","descripcion":"Carátula bancaria"}'>Carátula bancaria</button>
                 </div>
                 <form method="post" enctype="multipart/form-data">
                     {% csrf_token %}

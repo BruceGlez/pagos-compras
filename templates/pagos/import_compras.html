@@ -43,6 +43,7 @@
 
     {% if conflict_rows %}
     <hr>
+    {% if conflict_policy == 'ask' %}
     <h6>Conflictos detectados (elige por fila qué conservar)</h6>
     <div class="table-responsive">
       <table class="table table-sm table-bordered">
@@ -69,6 +70,12 @@
       </table>
       <p class="small text-muted mb-0">Estas decisiones se aplican al presionar "Confirmar importación".</p>
     </div>
+    {% else %}
+    <div class="alert alert-info py-2 mb-0">
+      Se detectaron <strong>{{ conflict_rows|length }}</strong> conflictos. Se aplicará automáticamente la política seleccionada:
+      <strong>{% if conflict_policy == 'overwrite' %}Sobrescribir con nuevo registro{% else %}Conservar compra existente{% endif %}</strong>.
+    </div>
+    {% endif %}
     {% endif %}
     </form>
 

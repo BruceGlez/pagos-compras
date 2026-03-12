@@ -103,6 +103,68 @@ class Productor(TimestampedModel):
         return super().save(*args, **kwargs)
 
 
+class ProductorCuentaBancaria(TimestampedModel):
+    productor = models.ForeignKey("Productor", on_delete=models.CASCADE, related_name="cuentas_bancarias")
+    banco = models.CharField(max_length=120, blank=True)
+    titular = models.CharField(max_length=200, blank=True)
+    cuenta = models.CharField(max_length=80)
+    clabe = models.CharField(max_length=30, blank=True)
+    caratula_archivo = models.FileField(upload_to="compras_documentos/%Y/%m/", blank=True)
+    activa = models.BooleanField(default=True)
+    predeterminada = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-predeterminada", "banco", "cuenta"]
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.predeterminada:
+            ProductorCuentaBancaria.objects.filter(productor=self.productor).exclude(pk=self.pk).update(predeterminada=False)
+
+    def __str__(self):
+        bank = f"{self.banco} " if self.banco else ""
+        return f"{bank}{self.cuenta}".strip()
+
+
+class FacturadorCuentaBancaria(TimestampedModel):
+    facturador = models.ForeignKey("PersonaFactura", on_delete=models.CASCADE, related_name="cuentas_bancarias")
+    banco = models.CharField(max_length=120, blank=True)
+    titular = models.CharField(max_length=200, blank=True)
+    cuenta = models.CharField(max_length=80)
+    clabe = models.CharField(max_length=30, blank=True)
+    caratula_archivo = models.FileField(upload_to="compras_documentos/%Y/%m/", blank=True)
+    activa = models.BooleanField(default=True)
+    predeterminada = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-predeterminada", "banco", "cuenta"]
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.predeterminada:
+            FacturadorCuentaBancaria.objects.filter(facturador=self.facturador).exclude(pk=self.pk).update(predeterminada=False)
+
+    def __str__(self):
+        bank = f"{self.banco} " if self.banco else ""
+        return f"{bank}{self.cuenta}".strip()
+
+
+class BeneficiaryValidationException(TimestampedModel):
+    productor = models.ForeignKey("Productor", on_delete=models.CASCADE, related_name="beneficiary_exceptions")
+    facturador = models.ForeignKey("PersonaFactura", on_delete=models.SET_NULL, null=True, blank=True, related_name="beneficiary_exceptions")
+    emisor_rfc = models.CharField(max_length=20, blank=True, default="")
+    emisor_nombre = models.CharField(max_length=200, blank=True, default="")
+    account_holder = models.CharField(max_length=200)
+    reason = models.CharField(max_length=240, blank=True)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.productor.nombre} · {self.account_holder}"
+
+
 class Contador(TimestampedModel):
     nombre = models.CharField(max_length=200)
     telefono = models.CharField(max_length=40, blank=True)
@@ -503,6 +565,9 @@ class Compra(TimestampedModel):
             return "solicitar_factura"
         if not self.uuid_factura:
             return "revisar_factura"
+        # Si ya no hay saldo por pagar (por pagos/deducciones), marcar flujo completo.
+        if (self.saldo_por_pagar or Decimal("0")) <= Decimal("0"):
+            return "completo"
         if not self.pago_registrado:
             return "pago"
         return "completo"

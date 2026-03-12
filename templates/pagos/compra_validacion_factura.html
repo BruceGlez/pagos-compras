@@ -24,6 +24,51 @@
     {% endif %}
 
     {% if ultima %}
+    <div class="row g-2 mb-3">
+      <div class="col-md-3">
+        <div class="border rounded p-2 h-100">
+          <div class="small text-muted">UUID</div>
+          <div class="small"><code>{{ ultima.uuid|default:"-" }}</code></div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="border rounded p-2 h-100">
+          <div class="small text-muted">RFC receptor</div>
+          <div>{{ ultima.rfc_receptor|default:"-" }}</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="border rounded p-2 h-100">
+          <div class="small text-muted">Moneda</div>
+          <div>{{ ultima.moneda|default:"-" }}</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="border rounded p-2 h-100">
+          <div class="small text-muted">Última validación</div>
+          <div>{{ ultima.created_at }}</div>
+        </div>
+      </div>
+    </div>
+
+    {% if not ultima.valid and ultima.raw_result.errors %}
+    <h6>Bloqueantes</h6>
+    <ul class="mb-3">
+      {% for err in ultima.raw_result.errors %}
+      <li>{{ err }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if ultima.raw_result.warnings %}
+    <h6>Advertencias</h6>
+    <ul class="mb-3">
+      {% for warn in ultima.raw_result.warnings %}
+      <li>{{ warn }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
     <h6>Expected vs Actual</h6>
     <div class="table-responsive mb-3">
       <table class="table table-sm align-middle">
@@ -37,26 +82,72 @@
           </tr>
           <tr>
             <td>Moneda</td>
-            <td>{{ compra.expected_moneda|default:"(sin validar)" }}</td>
-            <td>{{ ultima.moneda|default:"-" }}</td>
+            <td>
+              {% if compra.expected_moneda %}
+                {{ compra.expected_moneda }}
+                {% if compra.expected_moneda|upper == 'USD' %} — Dólares{% elif compra.expected_moneda|upper == 'MXN' %} — Pesos mexicanos{% endif %}
+              {% else %}(sin validar){% endif %}
+            </td>
+            <td>
+              {{ ultima.moneda|default:'-' }}
+              {% if ultima.moneda|upper == 'USD' %} — Dólares{% elif ultima.moneda|upper == 'MXN' %} — Pesos mexicanos{% endif %}
+            </td>
             <td>{% if not compra.expected_moneda or compra.expected_moneda|upper == ultima.moneda|upper %}✅{% else %}❌{% endif %}</td>
           </tr>
           <tr>
+            <td>Monto compra</td>
+            <td>{{ compra.compra_en_libras|default:"-" }}</td>
+            <td>{{ ultima.raw_result.total_comprobante|default:"-" }}</td>
+            <td>
+              {% if monto_within_tolerance is True %}
+                ✅
+              {% elif monto_within_tolerance is False %}
+                ❌ (dif: {{ monto_diff }})
+              {% else %}
+                -
+              {% endif %}
+            </td>
+          </tr>
+          <tr>
             <td>Forma pago</td>
-            <td>{{ compra.expected_forma_pago|default:"(sin validar)" }}</td>
-            <td>{{ ultima.raw_result.forma_pago|default:"-" }}</td>
+            <td>
+              {% if compra.expected_forma_pago %}
+                {{ compra.expected_forma_pago }} —
+                {% if compra.expected_forma_pago == '01' %}Efectivo{% elif compra.expected_forma_pago == '02' %}Cheque nominativo{% elif compra.expected_forma_pago == '03' %}Transferencia electrónica de fondos{% elif compra.expected_forma_pago == '04' %}Tarjeta de crédito{% elif compra.expected_forma_pago == '28' %}Tarjeta de débito{% elif compra.expected_forma_pago == '99' %}Por definir{% else %}Catálogo SAT{% endif %}
+              {% else %}(sin validar){% endif %}
+            </td>
+            <td>
+              {{ ultima.raw_result.forma_pago|default:"-" }}
+              {% if ultima.raw_result.forma_pago %}—
+                {% if ultima.raw_result.forma_pago == '01' %}Efectivo{% elif ultima.raw_result.forma_pago == '02' %}Cheque nominativo{% elif ultima.raw_result.forma_pago == '03' %}Transferencia electrónica de fondos{% elif ultima.raw_result.forma_pago == '04' %}Tarjeta de crédito{% elif ultima.raw_result.forma_pago == '28' %}Tarjeta de débito{% elif ultima.raw_result.forma_pago == '99' %}Por definir{% else %}Catálogo SAT{% endif %}
+              {% endif %}
+            </td>
             <td>{% if not compra.expected_forma_pago or compra.expected_forma_pago|upper == ultima.raw_result.forma_pago|upper %}✅{% else %}❌{% endif %}</td>
           </tr>
           <tr>
             <td>Método pago</td>
-            <td>{{ compra.expected_metodo_pago|default:"(sin validar)" }}</td>
-            <td>{{ ultima.metodo_pago|default:"-" }}</td>
+            <td>
+              {% if compra.expected_metodo_pago %}
+                {{ compra.expected_metodo_pago }} — {% if compra.expected_metodo_pago|upper == 'PUE' %}Pago en una sola exhibición{% elif compra.expected_metodo_pago|upper == 'PPD' %}Pago en parcialidades o diferido{% endif %}
+              {% else %}(sin validar){% endif %}
+            </td>
+            <td>
+              {{ ultima.metodo_pago|default:"-" }}
+              {% if ultima.metodo_pago %} — {% if ultima.metodo_pago|upper == 'PUE' %}Pago en una sola exhibición{% elif ultima.metodo_pago|upper == 'PPD' %}Pago en parcialidades o diferido{% endif %}{% endif %}
+            </td>
             <td>{% if not compra.expected_metodo_pago or compra.expected_metodo_pago|upper == ultima.metodo_pago|upper %}✅{% else %}❌{% endif %}</td>
           </tr>
           <tr>
             <td>Uso CFDI</td>
-            <td>{{ compra.expected_uso_cfdi|default:"(sin validar)" }}</td>
-            <td>{{ ultima.uso_cfdi|default:"-" }}</td>
+            <td>
+              {% if compra.expected_uso_cfdi %}
+                {{ compra.expected_uso_cfdi }} — {% if compra.expected_uso_cfdi|upper == 'G01' %}Adquisición de mercancías{% elif compra.expected_uso_cfdi|upper == 'S01' %}Sin efectos fiscales{% endif %}
+              {% else %}(sin validar){% endif %}
+            </td>
+            <td>
+              {{ ultima.uso_cfdi|default:"-" }}
+              {% if ultima.uso_cfdi %} — {% if ultima.uso_cfdi|upper == 'G01' %}Adquisición de mercancías{% elif ultima.uso_cfdi|upper == 'S01' %}Sin efectos fiscales{% endif %}{% endif %}
+            </td>
             <td>{% if not compra.expected_uso_cfdi or compra.expected_uso_cfdi|upper == ultima.uso_cfdi|upper %}✅{% else %}❌{% endif %}</td>
           </tr>
           <tr>
@@ -67,13 +158,25 @@
           </tr>
           <tr>
             <td>RESICO (leyenda/retención)</td>
-            <td>{{ ultima.raw_result.resico_policy_used|default:"AUTO" }}</td>
+            <td>
+              {{ ultima.raw_result.resico_policy_used|default:"AUTO" }} —
+              {% if ultima.raw_result.resico_policy_used == 'RETENCION_125' %}Requiere retención ISR 1.25%
+              {% elif ultima.raw_result.resico_policy_used == 'EXENCION_LEYENDA' %}Requiere leyenda de exención
+              {% else %}Acepta retención 1.25% o leyenda{% endif %}
+            </td>
             <td>{% if ultima.raw_result.has_exencion_leyenda %}Leyenda detectada{% else %}Sin leyenda{% endif %} · ISR={{ ultima.isr_retencion }}</td>
             <td>{% if ultima.valid or 'RESICO' not in ultima.blocked_reason %}✅{% else %}❌{% endif %}</td>
           </tr>
         </tbody>
       </table>
     </div>
+
+    {% if not ultima.valid %}
+    <div class="alert alert-warning py-2">
+      <strong>Sugerencia para contador:</strong>
+      Ajustar CFDI conforme a los campos en rojo (RFC receptor, moneda, forma/método de pago, uso CFDI, IVA y regla RESICO) y reenviar XML timbrado.
+    </div>
+    {% endif %}
     {% endif %}
 
     {% if anterior and ultima %}
@@ -90,7 +193,7 @@
           {% for v in validaciones %}
           <tr>
             <td>{{ v.created_at }}</td>
-            <td>{{ v.uuid|default:"-" }}</td>
+            <td><code>{{ v.uuid|default:"-" }}</code></td>
             <td>{% if v.valid %}<span class="badge text-bg-success">OK</span>{% else %}<span class="badge text-bg-danger">Bloqueada</span>{% endif %}</td>
             <td class="small">{{ v.blocked_reason|default:"-" }}</td>
           </tr>

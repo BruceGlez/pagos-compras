@@ -113,7 +113,16 @@ def _build_parsed_records(path: str | Path):
 
     aliases = {
         "FECHA LIQ": ["FECHA LIQ", "FECHA"],
-        "COMPRA EN LIBRAS": ["COMPRA EN LIBRAS", "TOTAL EN DLS", "TOTAL DLLS", "TOTAL DLS"],
+        # Prioridad: usar columna de total real de compra en dólares/libras cuando exista.
+        "COMPRA EN LIBRAS": [
+            "TOTAL DLLS LIBRAS",
+            "TOTAL DLS LIBRAS",
+            "TOTAL DOLLARS LIBRAS",
+            "COMPRA EN LIBRAS",
+            "TOTAL EN DLS",
+            "TOTAL DLLS",
+            "TOTAL DLS",
+        ],
         "PACAS": ["PACAS", "CANT"],
         "RETENCION (DEUDAS) USD": ["RETENCION (DEUDAS) USD", "RETENCION", "RETENCIÓN"],
     }
@@ -122,8 +131,24 @@ def _build_parsed_records(path: str | Path):
         keys = aliases.get(key, [key])
         for k in keys:
             i = idx.get(_norm_col(k))
-            if i is not None and i < len(r):
-                return r[i]
+            if i is None or i >= len(r):
+                continue
+            v = r[i]
+
+            # Caso común en reportes Crystal: encabezado en la última columna,
+            # pero el valor queda una celda a la izquierda por combinación de celdas.
+            if key == "COMPRA EN LIBRAS" and (v is None or (isinstance(v, str) and not v.strip())):
+                if i - 1 >= 0:
+                    left = r[i - 1]
+                    if left is not None and (not isinstance(left, str) or left.strip()):
+                        return left
+
+            # Para aliases, ignora celdas vacías y sigue buscando fallback.
+            if v is None:
+                continue
+            if isinstance(v, str) and not v.strip():
+                continue
+            return v
         return default
 
     groups: dict[tuple, int] = {}

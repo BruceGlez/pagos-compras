@@ -9,6 +9,10 @@ from django.db.models.deletion import ProtectedError
 from django.db.models import Count, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
+import re
+
 from django.utils import timezone
 from django.views.generic import ListView
 
@@ -29,6 +33,7 @@ from .forms import (
     CompraBankConfirmationForm,
     ContadorForm,
     DeduccionForm,
+    BeneficiaryValidationExceptionForm,
     DocumentoCompraForm,
     EmailTemplateForm,
     ImportAnticiposExcelForm,
@@ -36,10 +41,12 @@ from .forms import (
     PagoCompraForm,
     PersonaFacturaQuickForm,
     ProductorForm,
+    ProductorCuentaBancariaForm,
+    FacturadorCuentaBancariaForm,
     TipoCambioForm,
     XmlValidationConfigForm,
 )
-from .models import Anticipo, Compra, Contador, Deduccion, EmailOutboxLog, EmailTemplate, ImportRun, PagoCompra, PersonaFactura, Productor, TipoCambio, WorkflowStateChoices, XmlValidationConfig
+from .models import Anticipo, BeneficiaryValidationException, Compra, Contador, Deduccion, DocumentoCompra, EmailOutboxLog, EmailTemplate, FacturadorCuentaBancaria, ImportRun, PagoCompra, PersonaFactura, Productor, ProductorCuentaBancaria, TipoCambio, WorkflowStateChoices, XmlValidationConfig
 from .services import (
     build_invoice_request_email,
     build_invoice_request_message,
@@ -57,6 +64,8 @@ from .services import (
     preview_compras_excel,
     sync_microsip_debt_for_compra,
     transition_compra,
+    extract_pdf_text,
+    parse_payment_receipt_text,
 )
 
 
@@ -66,6 +75,72 @@ def _can_write(user):
     if user.is_superuser:
         return True
     return user.groups.filter(name__in=["Admin", "Operador"]).exists()
+
+
+LEGAL_TOKENS = {
+    "SA", "CV", "DE", "RL", "S", "A", "P", "I", "SC", "SPR", "SAPI", "SAB", "COOP", "AC", "THE", "DEL", "LA", "LOS", "LAS", "Y", "E",
+}
+
+
+def _norm_name(value: str) -> str:
+    txt = (value or "").upper().strip()
+    txt = txt.replace("Á", "A").replace("É", "E").replace("Í", "I").replace("Ó", "O").replace("Ú", "U")
+    txt = re.sub(r"[^A-Z0-9 ]+", " ", txt)
+    tokens = [t for t in txt.split() if t and t not in LEGAL_TOKENS and len(t) > 1]
+    return " ".join(tokens)
+
+
+def _token_similarity(a: str, b: str) -> Decimal:
+    sa = set((a or "").split())
+    sb = set((b or "").split())
+    if not sa or not sb:
+        return Decimal("0")
+    inter = len(sa & sb)
+    union = len(sa | sb)
+    return Decimal(str(inter / union)) if union else Decimal("0")
+
+
+def _beneficiary_validation(compra: Compra):
+    latest = compra.invoice_validations.first()
+    raw = (getattr(latest, "raw_result", {}) or {}) if latest else {}
+    emisor_nombre = (raw.get("nombre_emisor") or compra.factura or "").strip()
+    emisor_rfc = (raw.get("rfc_emisor") or getattr(latest, "rfc_emisor", "") or "").strip().upper()
+    account_holder = ""
+    if (compra.cuenta_productor or "").strip():
+        acc = None
+        if compra.facturador_id:
+            acc = FacturadorCuentaBancaria.objects.filter(facturador=compra.facturador, cuenta=compra.cuenta_productor).first()
+        if not acc:
+            acc = ProductorCuentaBancaria.objects.filter(productor=compra.productor, cuenta=compra.cuenta_productor).first()
+        if acc:
+            account_holder = (acc.titular or "").strip()
+
+    emisor_norm = _norm_name(emisor_nombre)
+    holder_norm = _norm_name(account_holder)
+
+    yellow_threshold = Decimal(str(getattr(settings, "BENEFICIARY_MATCH_YELLOW_THRESHOLD", "0.45")))
+
+    if not emisor_norm or not holder_norm:
+        return {"status": "yellow", "reason": "Falta nombre de emisor o titular de cuenta", "emisor": emisor_nombre, "holder": account_holder, "score": Decimal("0")}
+
+    if emisor_norm == holder_norm:
+        return {"status": "green", "reason": "Titular coincide con emisor", "emisor": emisor_nombre, "holder": account_holder, "score": Decimal("1")}
+
+    score = _token_similarity(emisor_norm, holder_norm)
+
+    has_exception = BeneficiaryValidationException.objects.filter(
+        active=True,
+        productor=compra.productor,
+        account_holder__iexact=account_holder,
+    ).filter(Q(emisor_rfc="") | Q(emisor_rfc=emisor_rfc)).exists()
+
+    if has_exception:
+        return {"status": "yellow", "reason": "Excepción autorizada encontrada (requiere justificación)", "emisor": emisor_nombre, "holder": account_holder, "score": score}
+    if score >= Decimal("0.80"):
+        return {"status": "green", "reason": "Coincidencia alta de nombre", "emisor": emisor_nombre, "holder": account_holder, "score": score}
+    if score >= yellow_threshold:
+        return {"status": "yellow", "reason": "Coincidencia parcial de nombre (requiere justificación)", "emisor": emisor_nombre, "holder": account_holder, "score": score}
+    return {"status": "red", "reason": "Titular de cuenta no coincide con emisor XML", "emisor": emisor_nombre, "holder": account_holder, "score": score}
 
 
 class HomeView(LoginRequiredMixin, ListView):
@@ -269,11 +344,16 @@ def import_compras_view(request):
     preview_rows = []
     conflict_rows = []
     import_run = None
+    conflict_policy = "ask"
+
+    # Solo Admin (grupo) o superuser pueden importar compras.
+    user = getattr(request, "user", None)
+    is_admin_import = bool(user and user.is_authenticated and (user.is_superuser or user.groups.filter(name="Admin").exists()))
+    if not is_admin_import:
+        messages.error(request, "Solo Admin puede importar compras.")
+        return redirect("compras_operativas")
 
     if request.method == "POST":
-        if not _can_write(request.user):
-            messages.error(request, "No tienes permisos para importar.")
-            return redirect("compras_operativas")
         form = ImportComprasExcelForm(request.POST, request.FILES)
         action = request.POST.get("action", "preview")
         if form.is_valid():
@@ -289,9 +369,10 @@ def import_compras_view(request):
 
             if action == "import":
                 resolutions = {}
-                for c in conflict_rows:
-                    rn = str(c["row_number"])
-                    resolutions[rn] = request.POST.get(f"conflict_row_{rn}", conflict_policy)
+                if conflict_policy == "ask":
+                    for c in conflict_rows:
+                        rn = str(c["row_number"])
+                        resolutions[rn] = request.POST.get(f"conflict_row_{rn}", conflict_policy)
 
                 stats = import_compras_excel(
                     tmp_path,
@@ -303,7 +384,12 @@ def import_compras_view(request):
                 import_run = ImportRun.objects.order_by("-created_at").first()
                 messages.success(request, "Importacion de compras completada.")
             else:
-                messages.info(request, "Vista previa generada. Revisa conflictos y luego confirma importación.")
+                if conflict_rows and conflict_policy == "ask":
+                    messages.info(request, "Vista previa generada. Revisa conflictos y luego confirma importación.")
+                elif conflict_rows:
+                    messages.info(request, "Vista previa generada. Los conflictos se resolverán automáticamente según la política seleccionada.")
+                else:
+                    messages.info(request, "Vista previa generada.")
 
     return render(
         request,
@@ -314,6 +400,7 @@ def import_compras_view(request):
             "preview_rows": preview_rows,
             "conflict_rows": conflict_rows,
             "import_run": import_run,
+            "conflict_policy": conflict_policy,
         },
     )
 
@@ -573,6 +660,41 @@ def compra_flujo_view(request, compra_id):
                 doc.compra = compra
                 doc.save()
 
+                # Parse payment receipt PDF and keep preview pending confirmation.
+                is_payment_pdf = doc.etapa == "pago" and file_name.endswith(".pdf")
+                if is_payment_pdf:
+                    try:
+                        pdf_bytes = doc.archivo.read()
+                    except Exception:
+                        pdf_bytes = b""
+
+                    parsed = parse_payment_receipt_text(extract_pdf_text(pdf_bytes)) if pdf_bytes else {}
+                    amount = parsed.get("amount")
+                    fecha_pago = parsed.get("apply_date")
+                    moneda_raw = (parsed.get("currency") or "").upper()
+                    moneda = "PESOS" if moneda_raw in {"MXP", "MXN"} else "DOLARES"
+                    referencia = (parsed.get("reference") or parsed.get("tracking") or "").strip()
+
+                    if amount and fecha_pago:
+                        request.session[f"pago_pdf_preview_{compra.id}"] = {
+                            "fecha_pago": str(fecha_pago),
+                            "monto": str(amount),
+                            "moneda": moneda,
+                            "cuenta_de_pago": (parsed.get("from_account") or compra.cuenta_productor or ""),
+                            "metodo_de_pago": "TRANSFERENCIA",
+                            "referencia": referencia[:100],
+                            "notas": (
+                                f"Autocargado desde comprobante PDF. "
+                                f"Beneficiario: {parsed.get('beneficiary') or '-'}; "
+                                f"Cuenta destino: {parsed.get('to_account') or '-'}; "
+                                f"Concepto: {parsed.get('concept') or '-'}"
+                            )[:1200],
+                        }
+                        request.session.modified = True
+                        messages.success(request, "Comprobante detectado. Revisa y confirma el pago sugerido en la sección de pago.")
+                    else:
+                        messages.warning(request, "No se pudo extraer monto/fecha del comprobante PDF para autocompletar pago.")
+
                 # Invoice XML validation scaffold (spec phase 3)
                 is_invoice_xml = doc.etapa == "factura" and file_name.endswith(".xml")
                 if is_invoice_xml:
@@ -611,6 +733,8 @@ def compra_flujo_view(request, compra_id):
                         expected_uso_cfdi=(compra.expected_uso_cfdi or ""),
                         expected_metodo_pago=(compra.expected_metodo_pago or ""),
                         expected_forma_pago=(compra.expected_forma_pago or ""),
+                        expected_total_comprobante=str(compra.compra_en_libras or ""),
+                        total_tolerance_usd="3",
                         requires_resico_retention=requires_resico,
                         resico_policy=resico_policy,
                     )
@@ -765,26 +889,113 @@ def compra_flujo_view(request, compra_id):
                 return redirect(f"/compras/{compra.id}/flujo/?step=pago")
             messages.error(request, "Error al agregar deducción.")
         elif form_name == "bank_confirm":
-            bank_form = CompraBankConfirmationForm(request.POST, instance=compra, prefix="bank")
-            if bank_form.is_valid():
-                obj = bank_form.save(commit=False)
-                if obj.bank_account_confirmed and not obj.bank_confirmed_at:
-                    obj.bank_confirmed_at = timezone.now()
-                obj.save()
-                actor = str(getattr(request.user, "username", "operador") or "operador")
-                if obj.bank_account_confirmed:
-                    try:
-                        transition_compra(
-                            compra,
-                            WorkflowStateChoices.READY_TO_PAY,
-                            actor=actor,
-                            reason="Cuenta bancaria confirmada",
-                        )
-                    except ValueError:
-                        pass
-                messages.success(request, "Confirmación bancaria guardada.")
+            selected_account_id = (request.POST.get("bank_account_id") or "").strip()
+            selected = None
+            if selected_account_id.startswith("f:") and selected_account_id[2:].isdigit() and compra.facturador_id:
+                selected = FacturadorCuentaBancaria.objects.filter(
+                    pk=int(selected_account_id[2:]), facturador=compra.facturador, activa=True
+                ).first()
+            elif selected_account_id.startswith("p:") and selected_account_id[2:].isdigit():
+                selected = ProductorCuentaBancaria.objects.filter(
+                    pk=int(selected_account_id[2:]), productor=compra.productor, activa=True
+                ).first()
+
+            if not selected:
+                messages.error(request, "Selecciona una cuenta del catálogo para confirmar.")
                 return redirect(f"/compras/{compra.id}/flujo/?step=pago")
-            messages.error(request, "Error al guardar confirmación bancaria.")
+
+            compra.cuenta_productor = selected.cuenta
+            compra.bank_account_confirmed = True
+            if not compra.bank_confirmed_at:
+                compra.bank_confirmed_at = timezone.now()
+            compra.bank_confirmation_source = "catalogo_cuentas"
+            extra_note = (request.POST.get("bank_confirmation_note") or "").strip()
+            compra.bank_confirmation_notes = (
+                f"Cuenta confirmada desde catálogo ({selected.banco} {selected.cuenta})"
+                + (f" · {extra_note}" if extra_note else "")
+            ).strip()
+
+            # Si la cuenta tiene carátula, anexarla automáticamente al expediente de pago.
+            if selected.caratula_archivo:
+                pago_docs = list(compra.documentos.filter(etapa="pago").values("archivo", "descripcion"))
+                has_caratula = any(
+                    ("caratula" in ((d.get("descripcion") or "").lower().replace("á", "a")))
+                    or ("caratula" in str(d.get("archivo") or "").lower().replace("á", "a"))
+                    for d in pago_docs
+                )
+                if not has_caratula:
+                    DocumentoCompra.objects.create(
+                        compra=compra,
+                        etapa="pago",
+                        descripcion="Carátula bancaria (catálogo cuenta seleccionada)",
+                        archivo=selected.caratula_archivo,
+                    )
+
+            compra.save(update_fields=[
+                "cuenta_productor",
+                "bank_account_confirmed",
+                "bank_confirmed_at",
+                "bank_confirmation_source",
+                "bank_confirmation_notes",
+                "updated_at",
+            ])
+
+            actor = str(getattr(request.user, "username", "operador") or "operador")
+            try:
+                transition_compra(
+                    compra,
+                    WorkflowStateChoices.READY_TO_PAY,
+                    actor=actor,
+                    reason="Cuenta bancaria confirmada",
+                )
+            except ValueError:
+                pass
+            banco_txt = (selected.banco or "-").strip() if selected else "-"
+            cuenta_txt = (selected.cuenta or "-").strip() if selected else "-"
+            clabe_txt = (selected.clabe or "-").strip() if selected else "-"
+            messages.success(
+                request,
+                f"Cuenta confirmada para pago. Beneficiario → Banco: {banco_txt} · Cuenta: {cuenta_txt} · CLABE: {clabe_txt}",
+            )
+            return redirect(f"/compras/{compra.id}/flujo/?step=pago")
+        elif form_name == "pago_pdf_discard":
+            request.session.pop(f"pago_pdf_preview_{compra.id}", None)
+            request.session.modified = True
+            messages.info(request, "Sugerencia de pago descartada.")
+            return redirect(f"/compras/{compra.id}/flujo/?step=pago")
+        elif form_name == "pago_pdf_confirm":
+            data = request.session.get(f"pago_pdf_preview_{compra.id}") or {}
+            if not data:
+                messages.error(request, "No hay sugerencia de pago pendiente por confirmar.")
+                return redirect(f"/compras/{compra.id}/flujo/?step=pago")
+            try:
+                fecha_pago = datetime.strptime(str(data.get("fecha_pago")), "%Y-%m-%d").date()
+                exists = PagoCompra.objects.filter(
+                    compra=compra,
+                    fecha_pago=fecha_pago,
+                    monto=Decimal(str(data.get("monto") or "0")),
+                    referencia=(data.get("referencia") or ""),
+                ).exists()
+                if exists:
+                    messages.info(request, "El pago sugerido ya existe, no se duplicó.")
+                else:
+                    PagoCompra.objects.create(
+                        compra=compra,
+                        fecha_pago=fecha_pago,
+                        monto=Decimal(str(data.get("monto") or "0")),
+                        moneda=(data.get("moneda") or "DOLARES"),
+                        cuenta_de_pago=(data.get("cuenta_de_pago") or ""),
+                        metodo_de_pago=(data.get("metodo_de_pago") or "TRANSFERENCIA"),
+                        referencia=(data.get("referencia") or "")[:100],
+                        notas=(data.get("notas") or "")[:1200],
+                    )
+                    messages.success(request, "Pago registrado desde comprobante PDF.")
+                request.session.pop(f"pago_pdf_preview_{compra.id}", None)
+                request.session.modified = True
+                return redirect(f"/compras/{compra.id}/flujo/?step=pago")
+            except Exception as e:
+                messages.error(request, f"No se pudo registrar pago desde comprobante: {e}")
+                return redirect(f"/compras/{compra.id}/flujo/?step=pago")
         elif form_name == "pago_registrar":
             pago_form = PagoCompraForm(request.POST, prefix="pagoitem")
             if pago_form.is_valid():
@@ -798,14 +1009,38 @@ def compra_flujo_view(request, compra_id):
                 if not latest_validation or not latest_validation.valid:
                     messages.error(request, "No se puede registrar pago: la factura no está validada.")
                     return redirect(f"/compras/{compra.id}/flujo/?step=pago")
+
+                beneficiary = _beneficiary_validation(compra)
+                if beneficiary["status"] == "red":
+                    messages.error(request, f"No se puede registrar pago: {beneficiary['reason']}")
+                    return redirect(f"/compras/{compra.id}/flujo/?step=pago")
+                if beneficiary["status"] == "yellow":
+                    justif = (request.POST.get("beneficiary_justification") or "").strip()
+                    if not justif:
+                        messages.error(request, "Se requiere justificación para excepción de beneficiario (coincidencia parcial).")
+                        return redirect(f"/compras/{compra.id}/flujo/?step=pago")
                 factura_files = list(compra.documentos.filter(etapa="factura").values_list("archivo", flat=True))
                 has_pdf = any(str(x).lower().endswith(".pdf") for x in factura_files)
                 if not has_pdf:
                     messages.error(request, "No se puede registrar pago: falta PDF de factura en expediente.")
                     return redirect(f"/compras/{compra.id}/flujo/?step=pago")
 
+                pago_docs = list(compra.documentos.filter(etapa="pago").values("archivo", "descripcion"))
+                has_caratula_bancaria = any(
+                    ("caratula" in ((d.get("descripcion") or "").lower().replace("á", "a")))
+                    or ("caratula" in str(d.get("archivo") or "").lower().replace("á", "a"))
+                    for d in pago_docs
+                )
+                if not has_caratula_bancaria:
+                    messages.error(request, "No se puede registrar pago: falta carátula bancaria en expediente (etapa Pago).")
+                    return redirect(f"/compras/{compra.id}/flujo/?step=pago")
+
                 pago = pago_form.save(commit=False)
                 pago.compra = compra
+                if beneficiary["status"] == "yellow":
+                    justif = (request.POST.get("beneficiary_justification") or "").strip()
+                    extra = f"[EXCEPCIÓN BENEFICIARIO] {justif}"
+                    pago.notas = f"{(pago.notas or '').strip()}\n{extra}".strip()
                 pago.save()
                 actor = str(getattr(request.user, "username", "operador") or "operador")
                 try:
@@ -926,6 +1161,7 @@ def compra_flujo_view(request, compra_id):
             messages.error(request, "Hay errores en el formulario.")
 
     current_step = request.GET.get("step") or ui_pending_step
+    edit_bank = bool((request.GET.get("edit_bank") or "").strip())
     step_items = [
         ("captura", "Registrar compra"),
         ("anticipos", "Revisar anticipos"),
@@ -960,8 +1196,23 @@ def compra_flujo_view(request, compra_id):
     extra_items_ui = [{"code": code, "label": label, "unlocked": code in unlocked_steps} for code, label in extra_items]
 
     existing_etapas = set(compra.documentos.values_list("etapa", flat=True))
+    cuentas_productor = list(compra.productor.cuentas_bancarias.filter(activa=True).order_by("-predeterminada", "banco", "cuenta")[:20])
+    cuentas_facturador = list(compra.facturador.cuentas_bancarias.filter(activa=True).order_by("-predeterminada", "banco", "cuenta")[:20]) if compra.facturador_id else []
+
+    confirmed_account = None
+    if (compra.cuenta_productor or "").strip():
+        if compra.facturador_id:
+            confirmed_account = compra.facturador.cuentas_bancarias.filter(cuenta=compra.cuenta_productor).first()
+        if not confirmed_account:
+            confirmed_account = compra.productor.cuentas_bancarias.filter(cuenta=compra.cuenta_productor).first()
+
+    beneficiary_validation = _beneficiary_validation(compra)
+    pago_pdf_preview = request.session.get(f"pago_pdf_preview_{compra.id}")
     last_microsip_snapshot = compra.debt_snapshots.filter(fuente="microsip").first()
     factura_docs = list(compra.documentos.filter(etapa="factura").values_list("archivo", flat=True))
+    pago_docs_qs = compra.documentos.filter(etapa="pago").order_by("-created_at")
+    pago_doc_latest = pago_docs_qs.first()
+    has_pago_comprobante = bool(pago_doc_latest)
     solicitud_logs = list(compra.email_logs.order_by("-created_at")[:10])
     has_xml = any(str(x).lower().endswith(".xml") for x in factura_docs)
     has_pdf = any(str(x).lower().endswith(".pdf") for x in factura_docs)
@@ -972,6 +1223,34 @@ def compra_flujo_view(request, compra_id):
         ("Factura XML/PDF", "factura" in existing_etapas),
         ("Comprobante pago", "pago" in existing_etapas),
     ]
+
+    payable = payable_breakdown(compra)
+    deducs = list(compra.deducciones.all())
+    tc_val = Decimal(str(compra.tipo_cambio_valor or "0"))
+
+    def _ded_to_usd(d):
+        m = Decimal(str(d.monto or "0"))
+        if (d.moneda or "").upper() == "PESOS" and tc_val > 0:
+            return (m / tc_val)
+        return m
+
+    coberturas_usd = Decimal("0")
+    otros_pendientes_usd = Decimal("0")
+    for d in deducs:
+        usd = _ded_to_usd(d)
+        concepto = (d.concepto or "").upper()
+        if "COBERT" in concepto:
+            coberturas_usd += usd
+        else:
+            otros_pendientes_usd += usd
+
+    total_descontar_usd = (
+        Decimal(str(payable.get("anticipos") or 0))
+        + Decimal(str(payable.get("debt_usd") or 0))
+        + Decimal(str(payable.get("debt_mxn_in_usd") or 0))
+        + Decimal(str(payable.get("resico") or 0))
+        + Decimal(str(payable.get("manual_usd") or 0))
+    )
 
     return render(
         request,
@@ -988,6 +1267,12 @@ def compra_flujo_view(request, compra_id):
             "divisiones": compra.divisiones.select_related("productor").order_by("id"),
             "pago_form": pago_form,
             "bank_form": bank_form,
+            "cuentas_productor": cuentas_productor,
+            "cuentas_facturador": cuentas_facturador,
+            "confirmed_account": confirmed_account,
+            "beneficiary_validation": beneficiary_validation,
+            "pago_pdf_preview": pago_pdf_preview,
+            "edit_bank": edit_bank,
             "deduccion_form": deduccion_form,
             "cancelar_form": cancelar_form,
             "facturador_form": facturador_form,
@@ -995,7 +1280,13 @@ def compra_flujo_view(request, compra_id):
             "pagos_registrados": compra.pagos_registrados.all(),
             "total_pagado_registrado": compra.total_pagado_registrado,
             "monto_objetivo_pago": compra.compra_en_libras,
-            "payable": payable_breakdown(compra),
+            "payable": payable,
+            "total_descontar_usd": total_descontar_usd,
+            "total_pagar_usd": (payable.get("saldo_a_pagar") or Decimal("0")),
+            "pending_microsip_usd": (compra.retencion_deudas_usd or Decimal("0")),
+            "pending_microsip_mxn": (compra.retencion_deudas_mxn or Decimal("0")),
+            "pending_coberturas_usd": coberturas_usd,
+            "pending_otros_usd": otros_pendientes_usd,
             "anticipos_pendientes": compra.productor.anticipos.filter(
                 pendiente_aplicar="PENDIENTE"
             ).order_by("-fecha_pago")[:20],
@@ -1008,6 +1299,9 @@ def compra_flujo_view(request, compra_id):
             "facturador_sin_contador": facturador_sin_contador,
             "solicitud_factura_texto": build_invoice_request_message(compra),
             "solicitud_logs": solicitud_logs,
+            "has_pago_comprobante": has_pago_comprobante,
+            "pago_doc_latest": pago_doc_latest,
+            "edit_comprobante": bool((request.GET.get("edit_comprobante") or "").strip()),
         },
     )
 
@@ -1053,6 +1347,8 @@ def compra_validacion_factura_view(request, compra_id):
             expected_uso_cfdi=(compra.expected_uso_cfdi or ""),
             expected_metodo_pago=(compra.expected_metodo_pago or ""),
             expected_forma_pago=(compra.expected_forma_pago or ""),
+            expected_total_comprobante=str(compra.compra_en_libras or ""),
+            total_tolerance_usd="3",
             requires_resico_retention=requires_resico,
             resico_policy=resico_policy,
         )
@@ -1065,10 +1361,32 @@ def compra_validacion_factura_view(request, compra_id):
     validaciones = list(compra.invoice_validations.all().order_by("-created_at")[:30])
     ultima = validaciones[0] if validaciones else None
     anterior = validaciones[1] if len(validaciones) > 1 else None
+
+    monto_diff = None
+    monto_within_tolerance = None
+    if ultima:
+        try:
+            expected = Decimal(str(compra.compra_en_libras or "0"))
+            actual_raw = (getattr(ultima, "raw_result", {}) or {}).get("total_comprobante", "")
+            if str(actual_raw).strip():
+                actual = Decimal(str(actual_raw))
+                monto_diff = abs(expected - actual)
+                monto_within_tolerance = monto_diff <= Decimal("3")
+        except (InvalidOperation, TypeError, ValueError):
+            monto_diff = None
+            monto_within_tolerance = None
+
     return render(
         request,
         "pagos/compra_validacion_factura.html",
-        {"compra": compra, "validaciones": validaciones, "ultima": ultima, "anterior": anterior},
+        {
+            "compra": compra,
+            "validaciones": validaciones,
+            "ultima": ultima,
+            "anterior": anterior,
+            "monto_diff": monto_diff,
+            "monto_within_tolerance": monto_within_tolerance,
+        },
     )
 
 
@@ -1124,6 +1442,126 @@ def productor_edit_view(request, productor_id):
     else:
         form = ProductorForm(instance=productor, prefix="prod")
     return render(request, "pagos/productor_form.html", {"form": form, "productor": productor})
+
+
+@login_required
+def productor_cuentas_view(request, productor_id):
+    productor = get_object_or_404(Productor, pk=productor_id)
+    cuentas = productor.cuentas_bancarias.all()
+
+    edit_id = (request.GET.get("edit") or "").strip()
+    edit_obj = None
+    if edit_id.isdigit():
+        edit_obj = productor.cuentas_bancarias.filter(pk=int(edit_id)).first()
+
+    if request.method == "POST":
+        if not _can_write(request.user):
+            messages.error(request, "No tienes permisos de edición.")
+            return redirect(f"/productores/{productor.id}/cuentas/")
+
+        flow_form = (request.POST.get("flow_form") or "save").strip()
+        if flow_form == "delete":
+            account_id = (request.POST.get("account_id") or "").strip()
+            obj = productor.cuentas_bancarias.filter(pk=int(account_id)).first() if account_id.isdigit() else None
+            if not obj:
+                messages.error(request, "Cuenta bancaria no encontrada.")
+                return redirect(f"/productores/{productor.id}/cuentas/")
+            was_default = obj.predeterminada
+            obj.delete()
+            if was_default:
+                next_default = productor.cuentas_bancarias.filter(activa=True).order_by("id").first()
+                if next_default:
+                    next_default.predeterminada = True
+                    next_default.save()
+                    productor.cuenta_productor = next_default.cuenta
+                    productor.save(update_fields=["cuenta_productor", "updated_at"])
+            messages.success(request, "Cuenta bancaria eliminada.")
+            return redirect(f"/productores/{productor.id}/cuentas/")
+
+        account_id = (request.POST.get("account_id") or "").strip()
+        instance = productor.cuentas_bancarias.filter(pk=int(account_id)).first() if account_id.isdigit() else None
+        form = ProductorCuentaBancariaForm(request.POST, request.FILES, instance=instance, prefix="cta")
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.productor = productor
+            obj.save()
+            if obj.predeterminada or not (productor.cuenta_productor or "").strip():
+                productor.cuenta_productor = obj.cuenta
+                productor.save(update_fields=["cuenta_productor", "updated_at"])
+            messages.success(request, "Cuenta bancaria guardada.")
+            return redirect(f"/productores/{productor.id}/cuentas/")
+        messages.error(request, "Revisa los datos de la cuenta bancaria.")
+    else:
+        form = ProductorCuentaBancariaForm(instance=edit_obj, prefix="cta")
+
+    return render(
+        request,
+        "pagos/productor_cuentas.html",
+        {"productor": productor, "cuentas": cuentas, "form": form, "edit_obj": edit_obj},
+    )
+
+
+@login_required
+def facturador_cuentas_view(request, facturador_id):
+    facturador = get_object_or_404(PersonaFactura, pk=facturador_id)
+    cuentas = facturador.cuentas_bancarias.all()
+
+    edit_id = (request.GET.get("edit") or "").strip()
+    edit_obj = facturador.cuentas_bancarias.filter(pk=int(edit_id)).first() if edit_id.isdigit() else None
+
+    if request.method == "POST":
+        if not _can_write(request.user):
+            messages.error(request, "No tienes permisos de edición.")
+            return redirect(f"/facturadores/{facturador.id}/cuentas/")
+
+        flow_form = (request.POST.get("flow_form") or "save").strip()
+        if flow_form == "delete":
+            account_id = (request.POST.get("account_id") or "").strip()
+            obj = facturador.cuentas_bancarias.filter(pk=int(account_id)).first() if account_id.isdigit() else None
+            if not obj:
+                messages.error(request, "Cuenta bancaria no encontrada.")
+                return redirect(f"/facturadores/{facturador.id}/cuentas/")
+            obj.delete()
+            messages.success(request, "Cuenta bancaria eliminada.")
+            return redirect(f"/facturadores/{facturador.id}/cuentas/")
+
+        account_id = (request.POST.get("account_id") or "").strip()
+        instance = facturador.cuentas_bancarias.filter(pk=int(account_id)).first() if account_id.isdigit() else None
+        form = FacturadorCuentaBancariaForm(request.POST, request.FILES, instance=instance, prefix="cta")
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.facturador = facturador
+            obj.save()
+            messages.success(request, "Cuenta bancaria guardada.")
+            return redirect(f"/facturadores/{facturador.id}/cuentas/")
+        messages.error(request, "Revisa los datos de la cuenta bancaria.")
+    else:
+        form = FacturadorCuentaBancariaForm(instance=edit_obj, prefix="cta")
+
+    return render(
+        request,
+        "pagos/facturador_cuentas.html",
+        {"facturador": facturador, "cuentas": cuentas, "form": form, "edit_obj": edit_obj},
+    )
+
+
+@login_required
+def beneficiary_exceptions_view(request):
+    qs = BeneficiaryValidationException.objects.select_related("productor", "facturador").order_by("-created_at")
+    if request.method == "POST":
+        if not _can_write(request.user):
+            messages.error(request, "No tienes permisos de edición.")
+            return redirect("beneficiary_exceptions")
+        form = BeneficiaryValidationExceptionForm(request.POST, prefix="bex")
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Excepción guardada.")
+            return redirect("beneficiary_exceptions")
+        messages.error(request, "Revisa los datos de la excepción.")
+    else:
+        form = BeneficiaryValidationExceptionForm(prefix="bex")
+
+    return render(request, "pagos/beneficiary_exceptions.html", {"items": qs[:200], "form": form})
 
 
 @login_required

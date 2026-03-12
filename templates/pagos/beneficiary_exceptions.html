@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Excepciones de beneficiario{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="mb-0">Excepciones de beneficiario</h5>
+    <a class="btn btn-outline-secondary btn-sm" href="/compras/">Volver</a>
+  </div>
+  <div class="card-body">
+    <form method="post" class="mb-3">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button class="btn btn-primary btn-sm" type="submit">Guardar excepción</button>
+    </form>
+
+    <div class="table-responsive">
+      <table class="table table-sm">
+        <thead><tr><th>Fecha</th><th>Productor</th><th>Facturador</th><th>RFC emisor</th><th>Titular permitido</th><th>Motivo</th><th>Activa</th></tr></thead>
+        <tbody>
+          {% for i in items %}
+          <tr>
+            <td>{{ i.created_at }}</td>
+            <td>{{ i.productor.nombre }}</td>
+            <td>{{ i.facturador.nombre|default:'-' }}</td>
+            <td>{{ i.emisor_rfc|default:'-' }}</td>
+            <td>{{ i.account_holder }}</td>
+            <td>{{ i.reason|default:'-' }}</td>
+            <td>{% if i.active %}Sí{% else %}No{% endif %}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="7" class="text-center">Sin excepciones.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -15,3 +15,4 @@ from .microsip_debt import (
     sync_microsip_debt_for_compra,
 )
 from .workflow import transition_compra
+from .payment_receipt import extract_pdf_text, parse_payment_receipt_text

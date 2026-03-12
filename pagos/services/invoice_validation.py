@@ -35,6 +35,8 @@ def parse_and_validate_cfdi_xml(
     expected_uso_cfdi: str = "",
     expected_metodo_pago: str = "",
     expected_forma_pago: str = "",
+    expected_total_comprobante: str = "",
+    total_tolerance_usd: str = "3",
     requires_resico_retention: bool = False,
     resico_policy: str = "AUTO",
 ):
@@ -80,9 +82,13 @@ def parse_and_validate_cfdi_xml(
         or ("no se efectuara retencion" in texto_norm)
     )
 
+    subtotal_comprobante = comp.attrib.get("SubTotal", "")
+    total_comprobante = comp.attrib.get("Total", "")
+
     result = {
         "uuid": uuid,
         "rfc_emisor": (emisor.attrib.get("Rfc", "") if emisor is not None else ""),
+        "nombre_emisor": (emisor.attrib.get("Nombre", "") if emisor is not None else ""),
         "rfc_receptor": (receptor.attrib.get("Rfc", "") if receptor is not None else ""),
         "regimen_fiscal_receptor": (receptor.attrib.get("RegimenFiscalReceptor", "") if receptor is not None else ""),
         "codigo_fiscal_receptor": (receptor.attrib.get("DomicilioFiscalReceptor", "") if receptor is not None else ""),
@@ -92,6 +98,8 @@ def parse_and_validate_cfdi_xml(
         "forma_pago": comp.attrib.get("FormaPago", ""),
         "efecto_comprobante": comp.attrib.get("TipoDeComprobante", ""),
         "moneda": comp.attrib.get("Moneda", ""),
+        "subtotal_comprobante": subtotal_comprobante,
+        "total_comprobante": total_comprobante,
         "iva_tasa": iva_tasa,
         "isr_retencion": str(isr_retencion),
         "isr_tasa_125": isr_tasa_125,
@@ -146,6 +154,18 @@ def parse_and_validate_cfdi_xml(
         if result["iva_tasa"] not in {"0.000000", "0", ""}:
             result["errors"].append("IVA debe ser 0%")
 
+    if expected_total_comprobante:
+        try:
+            expected_total = Decimal(str(expected_total_comprobante))
+            actual_total = Decimal(str(result.get("total_comprobante") or ""))
+            tolerance = Decimal(str(total_tolerance_usd or "3"))
+            if abs(expected_total - actual_total) > tolerance:
+                result["errors"].append(
+                    f"Monto de compra fuera de tolerancia: diferencia {abs(expected_total - actual_total)} > {tolerance} USD"
+                )
+        except Exception:
+            result["errors"].append("No se pudo validar monto total del CFDI")
+
     if requires_resico_retention:
         policy = (resico_policy or "AUTO").upper()
         has_ret = isr_retencion > 0 and isr_tasa_125
@@ -178,6 +198,8 @@ def create_invoice_validation_for_compra(
     expected_uso_cfdi: str = "",
     expected_metodo_pago: str = "",
     expected_forma_pago: str = "",
+    expected_total_comprobante: str = "",
+    total_tolerance_usd: str = "3",
     requires_resico_retention: bool = False,
     resico_policy: str = "AUTO",
 ):
@@ -193,6 +215,8 @@ def create_invoice_validation_for_compra(
         expected_uso_cfdi=expected_uso_cfdi,
         expected_metodo_pago=expected_metodo_pago,
         expected_forma_pago=expected_forma_pago,
+        expected_total_comprobante=expected_total_comprobante,
+        total_tolerance_usd=total_tolerance_usd,
         requires_resico_retention=requires_resico_retention,
         resico_policy=resico_policy,
     )

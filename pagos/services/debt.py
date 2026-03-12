@@ -10,10 +10,23 @@ def payable_breakdown(compra: Compra) -> dict:
     anticipos = compra.total_aplicado_anticipos or Decimal("0")
 
     snap = compra.debt_snapshots.order_by("-created_at").first()
-    debt_usd = (snap.total_usd if snap else Decimal("0")) + (compra.retencion_deudas_usd or Decimal("0"))
+
+    # Fuente única para evitar doble conteo:
+    # 1) Si la compra ya tiene retenciones capturadas/sincronizadas, usar esos campos.
+    # 2) Si no, caer al último snapshot histórico.
+    has_current_debt = (
+        (compra.retencion_deudas_usd or Decimal("0")) != Decimal("0")
+        or (compra.retencion_deudas_mxn or Decimal("0")) != Decimal("0")
+    )
+
+    if has_current_debt:
+        debt_usd = compra.retencion_deudas_usd or Decimal("0")
+        debt_mxn = compra.retencion_deudas_mxn or Decimal("0")
+    else:
+        debt_usd = snap.total_usd if snap else Decimal("0")
+        debt_mxn = snap.total_mxn if snap else Decimal("0")
 
     tc = compra.tipo_cambio_valor or Decimal("0")
-    debt_mxn = (snap.total_mxn if snap else Decimal("0")) + (compra.retencion_deudas_mxn or Decimal("0"))
     debt_mxn_in_usd = (debt_mxn / tc) if tc and tc > 0 else Decimal("0")
 
     resico = compra.retencion_resico or Decimal("0")
