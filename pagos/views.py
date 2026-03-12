@@ -9,6 +9,7 @@ from django.db.models.deletion import ProtectedError
 from django.db.models import Count, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.generic import ListView
 
 from .forms import (
@@ -327,8 +328,6 @@ def readiness_queue_action_view(request, compra_id):
     actor = str(getattr(request.user, "username", "operador") or "operador")
 
     if action == "bank_confirm":
-        from django.utils import timezone
-
         compra.bank_account_confirmed = True
         if not compra.bank_confirmed_at:
             compra.bank_confirmed_at = timezone.now()
@@ -671,12 +670,15 @@ def compra_flujo_view(request, compra_id):
                 return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
             messages.error(request, "No se pudo crear el facturador. Revisa los datos.")
         elif form_name == "enviar_solicitud_email":
-            to_email = (settings.SOLICITUD_FACTURA_TEST_TO or compra.correo or "").strip()
+            messages.warning(request, "Envío real a contador deshabilitado temporalmente. Usa el botón de envío TEST.")
+            return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
+        elif form_name == "enviar_solicitud_email_test":
+            to_email = (settings.SOLICITUD_FACTURA_TEST_TO or "").strip()
             if not to_email:
-                messages.error(request, "No hay correo destino configurado.")
+                messages.error(request, "No hay correo TEST configurado.")
                 return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
             payload = build_invoice_request_email(compra)
-            subject = payload["subject"]
+            subject = f"[TEST] {payload['subject']}"
             body = payload["body"]
             try:
                 provider = "gmail_oauth" if gmail_ready() else "smtp"
@@ -696,7 +698,22 @@ def compra_flujo_view(request, compra_id):
                     status="SENT",
                     error=(provider_msg_id or ""),
                 )
-                messages.success(request, f"Correo de solicitud enviado a {to_email} ({provider}).")
+
+                compra.solicitud_factura_enviada = True
+                compra.fecha_solicitud_factura = timezone.localdate()
+                compra.save(update_fields=["solicitud_factura_enviada", "fecha_solicitud_factura", "updated_at"])
+                actor = str(getattr(request.user, "username", "operador") or "operador")
+                try:
+                    transition_compra(
+                        compra,
+                        WorkflowStateChoices.WAITING_INVOICE,
+                        actor=actor,
+                        reason="Solicitud de factura enviada por correo TEST",
+                    )
+                except ValueError:
+                    pass
+
+                messages.success(request, f"Solicitud TEST enviada a {to_email} ({provider}).")
             except Exception as e:
                 EmailOutboxLog.objects.create(
                     compra=compra,
@@ -708,22 +725,7 @@ def compra_flujo_view(request, compra_id):
                     status="ERROR",
                     error=str(e),
                 )
-                messages.error(request, f"No se pudo enviar correo: {e}")
-            return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
-        elif form_name == "marcar_solicitud_factura":
-            compra.solicitud_factura_enviada = True
-            compra.save(update_fields=["solicitud_factura_enviada", "updated_at"])
-            actor = str(getattr(request.user, "username", "operador") or "operador")
-            try:
-                transition_compra(
-                    compra,
-                    WorkflowStateChoices.WAITING_INVOICE,
-                    actor=actor,
-                    reason="Solicitud de factura enviada",
-                )
-            except ValueError:
-                pass
-            messages.success(request, "Solicitud de factura marcada como enviada.")
+                messages.error(request, f"No se pudo enviar correo TEST: {e}")
             return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
         elif form_name == "microsip_sync_debt":
             try:
@@ -767,8 +769,6 @@ def compra_flujo_view(request, compra_id):
             if bank_form.is_valid():
                 obj = bank_form.save(commit=False)
                 if obj.bank_account_confirmed and not obj.bank_confirmed_at:
-                    from django.utils import timezone
-
                     obj.bank_confirmed_at = timezone.now()
                 obj.save()
                 actor = str(getattr(request.user, "username", "operador") or "operador")
@@ -934,7 +934,7 @@ def compra_flujo_view(request, compra_id):
         ("revisar_factura", "Revisar factura"),
         ("pago", "Pagar factura"),
     ]
-    extra_items = [("tc", "TC")]
+    extra_items = [("tc", "TC"), ("expediente", "Expediente")]
     if request.user.is_authenticated and request.user.is_superuser:
         extra_items.append(("cancelacion", "Control cancelación"))
     if not compra.es_division and compra.captura_completa:
@@ -962,6 +962,7 @@ def compra_flujo_view(request, compra_id):
     existing_etapas = set(compra.documentos.values_list("etapa", flat=True))
     last_microsip_snapshot = compra.debt_snapshots.filter(fuente="microsip").first()
     factura_docs = list(compra.documentos.filter(etapa="factura").values_list("archivo", flat=True))
+    solicitud_logs = list(compra.email_logs.order_by("-created_at")[:10])
     has_xml = any(str(x).lower().endswith(".xml") for x in factura_docs)
     has_pdf = any(str(x).lower().endswith(".pdf") for x in factura_docs)
     revisar_factura_ready = bool(has_xml and has_pdf and compra.uuid_factura)
@@ -1006,6 +1007,7 @@ def compra_flujo_view(request, compra_id):
             "revisar_factura_ready": revisar_factura_ready,
             "facturador_sin_contador": facturador_sin_contador,
             "solicitud_factura_texto": build_invoice_request_message(compra),
+            "solicitud_logs": solicitud_logs,
         },
     )
 

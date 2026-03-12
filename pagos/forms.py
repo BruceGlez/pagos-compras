@@ -438,8 +438,6 @@ class CompraSolicitarFacturaForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Compra
         fields = [
-            "solicitud_factura_enviada",
-            "fecha_solicitud_factura",
             "facturador",
             "expected_moneda",
             "expected_forma_pago",
@@ -448,10 +446,7 @@ class CompraSolicitarFacturaForm(BootstrapFormMixin, forms.ModelForm):
             "contador",
             "correo",
         ]
-        widgets = {"fecha_solicitud_factura": DateInput()}
         labels = {
-            "solicitud_factura_enviada": "Solicitud enviada",
-            "fecha_solicitud_factura": "Fecha solicitud",
             "facturador": "Entidad que emitirá la factura (RFC)",
             "expected_moneda": "Moneda esperada",
             "expected_forma_pago": "Forma de pago esperada",
