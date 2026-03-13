@@ -16,3 +16,4 @@ from .microsip_debt import (
 )
 from .workflow import transition_compra
 from .payment_receipt import extract_pdf_text, parse_payment_receipt_text
+from .compra_pdf_parser import parse_compra_pdf_fields, validate_compra_pdf

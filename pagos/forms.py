@@ -51,6 +51,7 @@ class ProductorForm(BootstrapFormMixin, forms.ModelForm):
         model = Productor
         fields = [
             "nombre",
+            "rfc",
             "regimen_fiscal",
             "microsip_cliente_nombre",
             "microsip_cliente_id",
@@ -78,6 +79,7 @@ class ProductorForm(BootstrapFormMixin, forms.ModelForm):
         code = self.cleaned_data.get("regimen_fiscal", "") or ""
         obj.regimen_fiscal_codigo = code
         obj.regimen_fiscal = SAT_REGIMENES_MAP.get(code, code)
+        obj.rfc = (obj.rfc or "").strip().upper()
         if commit:
             obj.save()
         return obj
@@ -451,6 +453,14 @@ class CompraFlujo5Form(BootstrapFormMixin, forms.ModelForm):
 
 
 class CompraSolicitarFacturaForm(BootstrapFormMixin, forms.ModelForm):
+    factura_source = forms.ChoiceField(
+        required=False,
+        choices=[("productor", "Mismo productor"), ("facturador", "Diferente entidad")],
+        label="¿Quién emitirá la factura?",
+        widget=forms.RadioSelect,
+        initial="productor",
+    )
+
     expected_moneda = forms.ChoiceField(
         required=False,
         choices=[("", "(Sin validar moneda)")] + [("USD", "USD Dólar americano"), ("MXN", "MXN Peso mexicano")],
@@ -496,6 +506,8 @@ class CompraSolicitarFacturaForm(BootstrapFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["facturador"].queryset = PersonaFactura.objects.filter(activo=True).order_by("nombre")
         self.fields["facturador"].widget.attrs.update({"class": "form-select js-filterable-select"})
+        if self.instance and self.instance.pk:
+            self.initial["factura_source"] = "facturador" if self.instance.facturador_id else "productor"
 
         if not self.initial.get("expected_moneda"):
             if (self.instance.moneda or "") == "DOLARES":
@@ -510,21 +522,56 @@ class CompraSolicitarFacturaForm(BootstrapFormMixin, forms.ModelForm):
             self.initial["expected_uso_cfdi"] = "G01"
 
         linked_contador = None
-        if self.instance and self.instance.pk and self.instance.facturador_id:
-            linked_contador = getattr(self.instance.facturador, "contador", None)
+        if self.instance and self.instance.pk:
+            source = self.initial.get("factura_source") or ("facturador" if self.instance.facturador_id else "productor")
+            if source == "facturador" and self.instance.facturador_id:
+                linked_contador = getattr(self.instance.facturador, "contador", None)
+            elif source == "productor" and self.instance.productor_id:
+                linked_contador = getattr(self.instance.productor, "contador", None)
 
         if linked_contador:
-            if not (self.initial.get("contador") or self.instance.contador):
-                self.initial["contador"] = linked_contador.nombre
-            if not (self.initial.get("correo") or self.instance.correo):
-                self.initial["correo"] = linked_contador.email
+            self.initial["contador"] = linked_contador.nombre or ""
+            self.initial["correo"] = linked_contador.email or ""
 
     def clean(self):
         cleaned = super().clean()
+        source = (cleaned.get("factura_source") or "productor").strip()
         facturador = cleaned.get("facturador")
-        if facturador and facturador.contador:
-            cleaned["contador"] = facturador.contador.nombre
-            cleaned["correo"] = facturador.contador.email
+
+        if source == "facturador":
+            if not facturador:
+                self.add_error("facturador", "Selecciona la entidad que factura.")
+            elif facturador.contador:
+                cleaned["contador"] = facturador.contador.nombre
+                cleaned["correo"] = facturador.contador.email
+        else:
+            cleaned["facturador"] = None
+            productor = getattr(self.instance, "productor", None)
+            missing = []
+            if not productor:
+                missing.append("Productor asignado")
+            else:
+                if not (productor.nombre or "").strip():
+                    missing.append("Nombre de productor")
+                if not (productor.rfc or "").strip():
+                    missing.append("RFC del productor")
+                if not (productor.regimen_fiscal_codigo or "").strip():
+                    missing.append("Régimen fiscal del productor")
+                if not productor.contador:
+                    missing.append("Contador ligado al productor")
+                else:
+                    if not (productor.contador.email or "").strip():
+                        missing.append("Correo del contador")
+
+            if missing:
+                raise forms.ValidationError(
+                    "Para usar 'Mismo productor', completa primero: " + ", ".join(missing)
+                )
+
+            # Autocompletar contacto desde catálogo de productor/contador.
+            cleaned["contador"] = (productor.contador.nombre if productor and productor.contador else cleaned.get("contador", ""))
+            cleaned["correo"] = (productor.contador.email if productor and productor.contador else cleaned.get("correo", ""))
+
         cleaned["expected_moneda"] = (cleaned.get("expected_moneda") or "").strip().upper()
         cleaned["expected_metodo_pago"] = (cleaned.get("expected_metodo_pago") or "").strip().upper()
         cleaned["expected_forma_pago"] = (cleaned.get("expected_forma_pago") or "").strip().upper()

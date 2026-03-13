@@ -4,6 +4,7 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.mail import send_mail
+from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
 from django.db.models.deletion import ProtectedError
 from django.db.models import Count, Q, Sum
@@ -75,6 +76,37 @@ def _can_write(user):
     if user.is_superuser:
         return True
     return user.groups.filter(name__in=["Admin", "Operador"]).exists()
+
+
+def _attach_email_proof_to_expediente(
+    compra: Compra,
+    *,
+    to_email: str,
+    subject: str,
+    body: str,
+    provider: str,
+    provider_msg_id: str = "",
+    template_code: str = "",
+):
+    ts = timezone.now()
+    stamp = ts.strftime("%Y%m%d_%H%M%S")
+    filename = f"acuse_envio_solicitud_compra_{compra.id}_{stamp}.txt"
+    content = (
+        "ACUSE DE ENVIO - SOLICITUD DE FACTURA\n"
+        f"Fecha/Hora: {ts.isoformat()}\n"
+        f"Compra ID: {compra.id}\n"
+        f"Numero compra: {compra.numero_compra}\n"
+        f"Destinatario: {to_email}\n"
+        f"Provider: {provider}\n"
+        f"Provider Message ID: {provider_msg_id or '-'}\n"
+        f"Template: {template_code or '-'}\n"
+        f"Asunto: {subject}\n"
+        "\n--- CUERPO ---\n"
+        f"{body}\n"
+    )
+
+    doc = DocumentoCompra(compra=compra, etapa="solicitud_factura", descripcion="Acuse envío solicitud factura")
+    doc.archivo.save(filename, ContentFile(content.encode("utf-8")), save=True)
 
 
 LEGAL_TOKENS = {
@@ -634,6 +666,38 @@ def compra_flujo_view(request, compra_id):
             compra.save(update_fields=["cancelada", "updated_at"])
             messages.success(request, "Compra reactivada.")
             return redirect(f"/compras/{compra.id}/flujo/?step={compra.flujo_step_default}")
+        elif form_name == "documento_delete":
+            is_admin_docs = bool(request.user.is_authenticated and (request.user.is_superuser or request.user.groups.filter(name="Admin").exists()))
+            if not is_admin_docs:
+                messages.error(request, "Solo Admin puede eliminar documentos del expediente.")
+                return redirect(f"/compras/{compra.id}/flujo/?step={request.GET.get('step') or compra.flujo_step_default}")
+            doc_id = (request.POST.get("documento_id") or "").strip()
+            doc = compra.documentos.filter(pk=int(doc_id)).first() if doc_id.isdigit() else None
+            if not doc:
+                messages.error(request, "Documento no encontrado.")
+                return redirect(f"/compras/{compra.id}/flujo/?step={request.GET.get('step') or compra.flujo_step_default}")
+            doc.delete()
+            messages.success(request, "Documento eliminado.")
+            return redirect(f"/compras/{compra.id}/flujo/?step={request.GET.get('step') or compra.flujo_step_default}")
+        elif form_name == "documento_update":
+            is_admin_docs = bool(request.user.is_authenticated and (request.user.is_superuser or request.user.groups.filter(name="Admin").exists()))
+            if not is_admin_docs:
+                messages.error(request, "Solo Admin puede actualizar documentos del expediente.")
+                return redirect(f"/compras/{compra.id}/flujo/?step={request.GET.get('step') or compra.flujo_step_default}")
+            doc_id = (request.POST.get("documento_id") or "").strip()
+            doc = compra.documentos.filter(pk=int(doc_id)).first() if doc_id.isdigit() else None
+            if not doc:
+                messages.error(request, "Documento no encontrado.")
+                return redirect(f"/compras/{compra.id}/flujo/?step={request.GET.get('step') or compra.flujo_step_default}")
+            new_desc = (request.POST.get("descripcion") or "").strip()
+            new_file = request.FILES.get("archivo")
+            if new_desc:
+                doc.descripcion = new_desc
+            if new_file:
+                doc.archivo = new_file
+            doc.save()
+            messages.success(request, "Documento actualizado.")
+            return redirect(f"/compras/{compra.id}/flujo/?step={request.GET.get('step') or compra.flujo_step_default}")
         elif form_name == "documento":
             documento_form = DocumentoCompraForm(request.POST, request.FILES, prefix="doc")
             if documento_form.is_valid():
@@ -821,6 +885,16 @@ def compra_flujo_view(request, compra_id):
                     provider=provider,
                     status="SENT",
                     error=(provider_msg_id or ""),
+                )
+
+                _attach_email_proof_to_expediente(
+                    compra,
+                    to_email=to_email,
+                    subject=subject,
+                    body=body,
+                    provider=provider,
+                    provider_msg_id=provider_msg_id,
+                    template_code=payload.get("template_code", ""),
                 )
 
                 compra.solicitud_factura_enviada = True
@@ -1096,16 +1170,27 @@ def compra_flujo_view(request, compra_id):
             if forms[form_name].is_valid():
                 forms[form_name].save()
                 compra.refresh_from_db()
-                if form_name == "solicitar_factura" and compra.facturador:
-                    compra.factura = compra.facturador.nombre
-                    linked_contador = compra.facturador.contador
-                    if linked_contador:
-                        compra.contador = linked_contador.nombre
-                        compra.correo = linked_contador.email
-                        compra.save(update_fields=["factura", "contador", "correo", "updated_at"])
+                if form_name == "solicitar_factura":
+                    source = (forms[form_name].cleaned_data.get("factura_source") or "productor").strip()
+                    if source == "facturador" and compra.facturador:
+                        compra.factura = compra.facturador.nombre
+                        linked_contador = compra.facturador.contador
+                        if linked_contador:
+                            compra.contador = linked_contador.nombre
+                            compra.correo = linked_contador.email
+                            compra.save(update_fields=["factura", "contador", "correo", "updated_at"])
+                        else:
+                            compra.save(update_fields=["factura", "updated_at"])
+                            messages.warning(request, "La entidad facturadora no tiene contador ligado. Vincúlalo en el catálogo de Entidades que facturan.")
                     else:
-                        compra.save(update_fields=["factura", "updated_at"])
-                        messages.warning(request, "La entidad facturadora no tiene contador ligado. Vincúlalo en el catálogo de Entidades que facturan.")
+                        compra.facturador = None
+                        compra.factura = compra.productor.nombre
+                        if compra.productor.contador:
+                            compra.contador = compra.productor.contador.nombre
+                            compra.correo = compra.productor.contador.email
+                            compra.save(update_fields=["facturador", "factura", "contador", "correo", "updated_at"])
+                        else:
+                            compra.save(update_fields=["facturador", "factura", "updated_at"])
 
                 if form_name == "revisar_factura":
                     factura_files = list(compra.documentos.filter(etapa="factura").values_list("archivo", flat=True))
@@ -1162,6 +1247,7 @@ def compra_flujo_view(request, compra_id):
 
     current_step = request.GET.get("step") or ui_pending_step
     edit_bank = bool((request.GET.get("edit_bank") or "").strip())
+    edit_solicitud_factura = bool((request.GET.get("edit_solicitud_factura") or "").strip())
     step_items = [
         ("captura", "Registrar compra"),
         ("anticipos", "Revisar anticipos"),
@@ -1207,6 +1293,14 @@ def compra_flujo_view(request, compra_id):
             confirmed_account = compra.productor.cuentas_bancarias.filter(cuenta=compra.cuenta_productor).first()
 
     beneficiary_validation = _beneficiary_validation(compra)
+    solicitud_configurada = bool(
+        (compra.expected_moneda or "").strip()
+        and (compra.expected_forma_pago or "").strip()
+        and (compra.expected_metodo_pago or "").strip()
+        and (compra.expected_uso_cfdi or "").strip()
+        and (compra.contador or "").strip()
+        and (compra.correo or "").strip()
+    )
     pago_pdf_preview = request.session.get(f"pago_pdf_preview_{compra.id}")
     last_microsip_snapshot = compra.debt_snapshots.filter(fuente="microsip").first()
     factura_docs = list(compra.documentos.filter(etapa="factura").values_list("archivo", flat=True))
@@ -1218,10 +1312,26 @@ def compra_flujo_view(request, compra_id):
     has_pdf = any(str(x).lower().endswith(".pdf") for x in factura_docs)
     revisar_factura_ready = bool(has_xml and has_pdf and compra.uuid_factura)
     facturador_sin_contador = bool(compra.facturador_id and not getattr(compra.facturador, "contador", None))
+    productor_missing_fields = []
+    if not (compra.productor.rfc or "").strip():
+        productor_missing_fields.append("RFC")
+    if not (compra.productor.regimen_fiscal_codigo or "").strip():
+        productor_missing_fields.append("Régimen fiscal")
+    if not compra.productor.contador:
+        productor_missing_fields.append("Contador ligado")
+    elif not (compra.productor.contador.email or "").strip():
+        productor_missing_fields.append("Correo de contador")
+
+    docs_compra_original = list(compra.documentos.filter(etapa="compra_original").order_by("-created_at")[:5])
+    docs_solicitud = list(compra.documentos.filter(etapa="solicitud_factura").order_by("-created_at")[:5])
+    docs_factura = list(compra.documentos.filter(etapa="factura").order_by("-created_at")[:8])
+    docs_pago = list(compra.documentos.filter(etapa="pago").order_by("-created_at")[:8])
+
     expediente_status = [
-        ("Solicitud factura", "solicitud_factura" in existing_etapas),
-        ("Factura XML/PDF", "factura" in existing_etapas),
-        ("Comprobante pago", "pago" in existing_etapas),
+        ("Compra original", bool(docs_compra_original), docs_compra_original),
+        ("Solicitud factura", bool(docs_solicitud), docs_solicitud),
+        ("Factura XML/PDF", bool(docs_factura), docs_factura),
+        ("Comprobante pago", bool(docs_pago), docs_pago),
     ]
 
     payable = payable_breakdown(compra)
@@ -1271,8 +1381,10 @@ def compra_flujo_view(request, compra_id):
             "cuentas_facturador": cuentas_facturador,
             "confirmed_account": confirmed_account,
             "beneficiary_validation": beneficiary_validation,
+            "solicitud_configurada": solicitud_configurada,
             "pago_pdf_preview": pago_pdf_preview,
             "edit_bank": edit_bank,
+            "edit_solicitud_factura": edit_solicitud_factura,
             "deduccion_form": deduccion_form,
             "cancelar_form": cancelar_form,
             "facturador_form": facturador_form,
@@ -1299,9 +1411,11 @@ def compra_flujo_view(request, compra_id):
             "facturador_sin_contador": facturador_sin_contador,
             "solicitud_factura_texto": build_invoice_request_message(compra),
             "solicitud_logs": solicitud_logs,
+            "productor_missing_fields": productor_missing_fields,
             "has_pago_comprobante": has_pago_comprobante,
             "pago_doc_latest": pago_doc_latest,
             "edit_comprobante": bool((request.GET.get("edit_comprobante") or "").strip()),
+            "can_manage_docs": bool(request.user.is_authenticated and (request.user.is_superuser or request.user.groups.filter(name="Admin").exists())),
         },
     )
 

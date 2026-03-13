@@ -44,6 +44,7 @@ class EstadoPagoChoices(models.TextChoices):
 
 
 class DocumentoEtapaChoices(models.TextChoices):
+    COMPRA_ORIGINAL = "compra_original", _("Compra original")
     SOLICITUD_FACTURA = "solicitud_factura", _("Solicitud Factura")
     FACTURA = "factura", _("Factura")
     PAGO = "pago", _("Pago")
@@ -68,6 +69,7 @@ class Productor(TimestampedModel):
     nombre = models.CharField(max_length=200)
     regimen_fiscal = models.CharField(max_length=120, blank=True)
     regimen_fiscal_codigo = models.CharField(max_length=3, blank=True, db_index=True)
+    rfc = models.CharField(max_length=20, blank=True, db_index=True)
     microsip_cliente_nombre = models.CharField(max_length=240, blank=True)
     microsip_cliente_id = models.CharField(max_length=40, blank=True)
     contador = models.ForeignKey(
@@ -378,6 +380,8 @@ class Compra(TimestampedModel):
     correo = models.EmailField(blank=True)
     estatus_rep = models.CharField(max_length=30, blank=True)
     uuid_ppd = models.CharField(max_length=80, blank=True)
+    compra_pdf_validada = models.BooleanField(default=False)
+    compra_pdf_validada_at = models.DateTimeField(null=True, blank=True)
     solicitud_factura_enviada = models.BooleanField(default=False)
     fecha_solicitud_factura = models.DateField(null=True, blank=True)
     anticipos_revisados = models.BooleanField(default=False)

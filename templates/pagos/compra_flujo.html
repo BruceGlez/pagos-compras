@@ -59,33 +59,112 @@
             <div class="card-header"><strong>Formulario actual</strong></div>
             <div class="card-body">
                 {% if active_form %}
+                {% if current_step == "captura" and compra.captura_completa and not request.GET.edit_captura %}
+                <div class="alert alert-secondary py-2">
+                    <div><strong>Resumen de captura</strong></div>
+                    <div class="small">Compra: {{ compra.numero_compra }}</div>
+                    <div class="small">Fecha LIQ: {{ compra.fecha_liq }}</div>
+                    <div class="small">Productor: {{ compra.productor.nombre }}</div>
+                    <div class="small">Pacas: {{ compra.pacas|default:'-' }}</div>
+                    <div class="small">Total DLS: {{ compra.compra_en_libras|money }}</div>
+                </div>
+                <a class="btn btn-outline-secondary btn-sm" href="/compras/{{ compra.id }}/flujo/?step=captura&edit_captura=1">Editar captura</a>
+                {% else %}
                 <form method="post">
                     {% csrf_token %}
                     <input type="hidden" name="flow_form" value="{{ current_step }}">
-                    {% if current_step == "solicitar_factura" %}
-                        <p>
-                            {{ active_form.facturador.label_tag }} {{ active_form.facturador }}
-                            <button class="btn btn-link btn-sm p-0 ms-1" type="button" data-bs-toggle="collapse" data-bs-target="#nuevo-facturador" aria-expanded="false" aria-controls="nuevo-facturador">
-                                + Crear nuevo facturador
-                            </button>
-                        </p>
-                        <p>{{ active_form.expected_moneda.label_tag }} {{ active_form.expected_moneda }}</p>
-                        <p>{{ active_form.expected_forma_pago.label_tag }} {{ active_form.expected_forma_pago }}</p>
-                        <p>{{ active_form.expected_metodo_pago.label_tag }} {{ active_form.expected_metodo_pago }}</p>
-                        <p>{{ active_form.expected_uso_cfdi.label_tag }} {{ active_form.expected_uso_cfdi }}</p>
-                        <p>{{ active_form.expected_rfc_receptor.label_tag }} {{ active_form.expected_rfc_receptor }}</p>
-                        <p>{{ active_form.contador.label_tag }} {{ active_form.contador }}</p>
-                        <p>{{ active_form.correo.label_tag }} {{ active_form.correo }}</p>
+                    {% if current_step == "solicitar_factura" and solicitud_configurada and not edit_solicitud_factura %}
+                        <div class="alert alert-secondary py-2">
+                            <div><strong>Resumen solicitud de factura</strong></div>
+                            <div class="small mt-1"><strong>Fuente de factura:</strong>
+                                {% if compra.facturador %}
+                                    Diferente entidad · {{ compra.facturador.nombre }} (RFC: {{ compra.facturador.rfc|default:'-' }})
+                                {% else %}
+                                    Mismo productor · {{ compra.productor.nombre }} (RFC: {{ compra.productor.rfc|default:'-' }})
+                                {% endif %}
+                            </div>
+                            <div class="small"><strong>Productor base:</strong> {{ compra.productor.nombre }} (RFC: {{ compra.productor.rfc|default:'-' }})</div>
+                            <div class="small"><strong>Contador:</strong> {{ compra.contador|default:'-' }} · {{ compra.correo|default:'-' }}</div>
+                            <hr class="my-2">
+                            <div class="small"><strong>Reglas CFDI esperadas</strong></div>
+                            <div class="small">Moneda: <strong>{{ compra.expected_moneda|default:'-' }}</strong></div>
+                            <div class="small">Forma de pago: <strong>{{ compra.expected_forma_pago|default:'-' }}</strong>
+                                {% if compra.expected_forma_pago == '03' %} — Transferencia electrónica{% elif compra.expected_forma_pago == '01' %} — Efectivo{% elif compra.expected_forma_pago == '28' %} — Tarjeta de débito{% elif compra.expected_forma_pago == '04' %} — Tarjeta de crédito{% endif %}
+                            </div>
+                            <div class="small">Método de pago: <strong>{{ compra.expected_metodo_pago|default:'-' }}</strong>
+                                {% if compra.expected_metodo_pago == 'PUE' %} — Pago en una sola exhibición{% elif compra.expected_metodo_pago == 'PPD' %} — Pago en parcialidades o diferido{% endif %}
+                            </div>
+                            <div class="small">Uso CFDI: <strong>{{ compra.expected_uso_cfdi|default:'-' }}</strong>
+                                {% if compra.expected_uso_cfdi == 'G01' %} — Adquisición de mercancías{% elif compra.expected_uso_cfdi == 'S01' %} — Sin efectos fiscales{% endif %}
+                            </div>
+                            <div class="small">RFC receptor esperado: <strong>{{ compra.expected_rfc_receptor|default:'-' }}</strong></div>
+                            <hr class="my-2">
+                            <div class="small"><strong>Estado de envío:</strong>
+                                {% if compra.solicitud_factura_enviada %}
+                                    <span class="badge text-bg-success">Enviada</span> {{ compra.fecha_solicitud_factura|default:'-' }}
+                                {% else %}
+                                    <span class="badge text-bg-warning">Pendiente de envío</span>
+                                {% endif %}
+                            </div>
+                            {% if solicitud_logs and solicitud_logs.0 %}
+                            <div class="small text-muted">Último intento: {{ solicitud_logs.0.created_at }} · {{ solicitud_logs.0.to_email }} · {{ solicitud_logs.0.status }}</div>
+                            {% endif %}
+                        </div>
+                        <a class="btn btn-outline-secondary btn-sm" href="/compras/{{ compra.id }}/flujo/?step=solicitar_factura&edit_solicitud_factura=1">Editar solicitud</a>
                     {% else %}
-                        {{ active_form.as_p }}
+                        {% if current_step == "solicitar_factura" %}
+                            <div class="small text-muted mb-2">Selecciona quién emitirá la factura para esta compra.</div>
+                            <div class="card mb-2">
+                                <div class="card-body py-2">
+                                    <div class="small mb-2"><strong>{{ active_form.factura_source.label }}</strong></div>
+                                    {% with fs=active_form.factura_source.value|default:'productor' %}
+                                    <div class="d-grid gap-2" id="factura-source-cards">
+                                        <input class="btn-check" type="radio" name="solicitar_factura-factura_source" id="fs_productor" value="productor" {% if fs == 'productor' %}checked{% endif %}>
+                                        <label class="btn btn-outline-success text-start" for="fs_productor">✅ Mismo productor</label>
+
+                                        <input class="btn-check" type="radio" name="solicitar_factura-factura_source" id="fs_facturador" value="facturador" {% if fs == 'facturador' %}checked{% endif %}>
+                                        <label class="btn btn-outline-primary text-start" for="fs_facturador">🏢 Diferente entidad que factura</label>
+                                    </div>
+                                    {% endwith %}
+                                </div>
+                            </div>
+                            <div class="alert alert-light py-2 mb-2 small">
+                                <div><strong>Productor actual:</strong> {{ compra.productor.nombre }}</div>
+                                <div><strong>RFC productor:</strong> {{ compra.productor.rfc|default:'(faltante)' }}</div>
+                                <div><strong>Contador ligado:</strong> {{ compra.productor.contador.nombre|default:'(faltante)' }}</div>
+                                <div><strong>Correo contador:</strong> {{ compra.productor.contador.email|default:'(faltante)' }}</div>
+                                {% if productor_missing_fields %}
+                                <div class="mt-2 text-warning"><strong>Faltan datos:</strong> {{ productor_missing_fields|join:", " }}</div>
+                                <a class="btn btn-sm btn-outline-warning mt-1" href="/productores/{{ compra.productor.id }}/editar/?next=/compras/{{ compra.id }}/flujo/%3Fstep%3Dsolicitar_factura">Completar datos del productor</a>
+                                {% endif %}
+                            </div>
+                            <div id="facturador-fields">
+                            <p>
+                                {{ active_form.facturador.label_tag }} {{ active_form.facturador }}
+                                <button class="btn btn-link btn-sm p-0 ms-1" type="button" data-bs-toggle="collapse" data-bs-target="#nuevo-facturador" aria-expanded="false" aria-controls="nuevo-facturador">
+                                    + Crear nuevo facturador
+                                </button>
+                            </p>
+                            </div>
+                            <p>{{ active_form.expected_moneda.label_tag }} {{ active_form.expected_moneda }}</p>
+                            <p>{{ active_form.expected_forma_pago.label_tag }} {{ active_form.expected_forma_pago }}</p>
+                            <p>{{ active_form.expected_metodo_pago.label_tag }} {{ active_form.expected_metodo_pago }}</p>
+                            <p>{{ active_form.expected_uso_cfdi.label_tag }} {{ active_form.expected_uso_cfdi }}</p>
+                            <p>{{ active_form.expected_rfc_receptor.label_tag }} {{ active_form.expected_rfc_receptor }}</p>
+                            <p>{{ active_form.contador.label_tag }} {{ active_form.contador }}</p>
+                            <p>{{ active_form.correo.label_tag }} {{ active_form.correo }}</p>
+                        {% else %}
+                            {{ active_form.as_p }}
+                        {% endif %}
+                        <button class="btn btn-primary btn-sm" type="submit" {% if current_step == "revisar_factura" and not revisar_factura_ready %}disabled title="Falta XML, PDF o UUID"{% endif %}>Guardar y continuar</button>
                     {% endif %}
-                    <button class="btn btn-primary btn-sm" type="submit" {% if current_step == "revisar_factura" and not revisar_factura_ready %}disabled title="Falta XML, PDF o UUID"{% endif %}>Guardar y continuar</button>
                 </form>
                 {% if current_step == "revisar_factura" and not revisar_factura_ready %}
                 <p class="small text-warning mt-2 mb-0">Para continuar: sube XML + PDF y captura UUID.</p>
                 {% endif %}
                 {% if current_step == "pago" and compra.uuid_factura_faltante %}
                 <p class="small text-warning mt-2 mb-0">Se puede registrar el pago, pero el UUID de factura sigue pendiente.</p>
+                {% endif %}
                 {% endif %}
                 {% endif %}
 
@@ -502,27 +581,46 @@
         </div>
     </div>
     <div class="col-lg-5">
-        {% if current_step == "revisar_factura" or current_step == "expediente" %}
+        {% if current_step == "captura" or current_step == "revisar_factura" or current_step == "expediente" %}
         <div class="card">
             <div class="card-header"><strong>Expediente</strong></div>
             <div class="card-body">
                 <div class="small text-muted mb-2">
-                    Sugerencia: en <strong>Solicitar factura</strong> sube acuse/correo de solicitud. En <strong>Revisar factura</strong> sube XML y PDF del proveedor.
+                    {% if current_step == "solicitar_factura" %}
+                        Sube acuse/correo de solicitud.
+                    {% elif current_step == "revisar_factura" %}
+                        Sube XML y PDF del proveedor para validar.
+                    {% elif current_step == "pago" %}
+                        Sube comprobante o carátula bancaria.
+                    {% else %}
+                        Sube el documento correspondiente al paso actual.
+                    {% endif %}
                 </div>
-                <div class="small text-muted mb-1">Atajos de tipo de documento:</div>
+                <div class="small text-muted mb-1">Atajos:</div>
                 <div class="d-flex gap-2 flex-wrap mb-2">
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"compra_original","descripcion":"Compra original PDF"}'>Compra original PDF</button>
+                    {% if current_step == "solicitar_factura" %}
                     <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"solicitud_factura","descripcion":"Solicitud enviada (correo/whatsapp)"}'>Solicitud enviada</button>
+                    {% elif current_step == "revisar_factura" %}
                     <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"factura","descripcion":"Factura XML"}'>Factura XML</button>
                     <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"factura","descripcion":"Factura PDF proveedor"}'>Factura PDF</button>
                     <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"factura","descripcion":"SAT PDF validado"}'>SAT validado</button>
+                    {% elif current_step == "pago" %}
                     <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"pago","descripcion":"Comprobante de pago"}'>Comprobante pago</button>
                     <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"pago","descripcion":"Carátula bancaria"}'>Carátula bancaria</button>
+                    {% else %}
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"otro","descripcion":"Documento de soporte"}'>Documento soporte</button>
+                    {% endif %}
                 </div>
-                <form method="post" enctype="multipart/form-data">
+                <form method="post" enctype="multipart/form-data" class="mb-2">
                     {% csrf_token %}
                     <input type="hidden" name="flow_form" value="documento">
-                    {{ documento_form.as_p }}
-                    <button class="btn btn-outline-primary btn-sm" type="submit">Subir documento</button>
+                    <div class="row g-2 align-items-end">
+                        <div class="col-4">{{ documento_form.etapa.label_tag }}{{ documento_form.etapa }}</div>
+                        <div class="col-8">{{ documento_form.descripcion.label_tag }}{{ documento_form.descripcion }}</div>
+                        <div class="col-8">{{ documento_form.archivo.label_tag }}{{ documento_form.archivo }}</div>
+                        <div class="col-4"><button class="btn btn-outline-primary btn-sm w-100" type="submit">Subir documento</button></div>
+                    </div>
                 </form>
                 {% if ultima_validacion_factura %}
                 <hr>
@@ -540,28 +638,48 @@
                 </div>
                 {% endif %}
                 <hr>
-                <h6>Checklist expediente</h6>
-                <ul class="list-group mb-3">
-                    {% for label,ok in expediente_status %}
-                    <li class="list-group-item d-flex justify-content-between">
-                        <span>{{ label }}</span>
-                        {% if ok %}
-                        <span class="badge text-bg-success">OK</span>
+                <h6>Checklist expediente + documentos</h6>
+                <ul class="list-group list-group-flush">
+                    {% for label,ok,docs in expediente_status %}
+                    <li class="list-group-item px-0 py-2">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <strong>{{ label }}</strong>
+                            {% if ok %}<span class="badge text-bg-success">OK</span>{% else %}<span class="badge text-bg-warning">Falta</span>{% endif %}
+                        </div>
+                        {% if docs %}
+                            {% for doc in docs %}
+                            <div class="d-flex justify-content-between align-items-center small border rounded px-2 py-1 mb-1">
+                                <span>{% if doc.descripcion %}{{ doc.descripcion }}{% else %}{{ doc.get_etapa_display }}{% endif %}</span>
+                                <span class="d-flex gap-2 align-items-center">
+                                    <a href="{{ doc.archivo.url }}" target="_blank">Ver</a>
+                                    {% if can_manage_docs %}
+                                    <details>
+                                        <summary style="cursor:pointer;">Editar</summary>
+                                        <div class="mt-2" style="min-width:300px;">
+                                            <form method="post" enctype="multipart/form-data" class="mb-1">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="flow_form" value="documento_update">
+                                                <input type="hidden" name="documento_id" value="{{ doc.id }}">
+                                                <input class="form-control form-control-sm mb-1" name="descripcion" value="{{ doc.descripcion|default:'' }}" placeholder="Descripción">
+                                                <input type="file" class="form-control form-control-sm mb-1" name="archivo">
+                                                <button class="btn btn-sm btn-outline-secondary" type="submit">Actualizar</button>
+                                            </form>
+                                            <form method="post" onsubmit="return confirm('¿Eliminar documento?');">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="flow_form" value="documento_delete">
+                                                <input type="hidden" name="documento_id" value="{{ doc.id }}">
+                                                <button class="btn btn-sm btn-outline-danger" type="submit">Eliminar</button>
+                                            </form>
+                                        </div>
+                                    </details>
+                                    {% endif %}
+                                </span>
+                            </div>
+                            {% endfor %}
                         {% else %}
-                        <span class="badge text-bg-warning">Falta</span>
+                            <div class="small text-muted">Sin documentos cargados en esta sección.</div>
                         {% endif %}
                     </li>
-                    {% endfor %}
-                </ul>
-                <ul class="list-group list-group-flush">
-                    {% for doc in documentos %}
-                    <li class="list-group-item px-0">
-                        <strong>{{ doc.get_etapa_display }}</strong>
-                        {% if doc.descripcion %}- {{ doc.descripcion }}{% endif %}
-                        <a href="{{ doc.archivo.url }}" target="_blank">Ver</a>
-                    </li>
-                    {% empty %}
-                    <li class="list-group-item px-0">Sin documentos cargados.</li>
                     {% endfor %}
                 </ul>
             </div>
@@ -609,12 +727,35 @@
 
 <script>
 (() => {
+  const sourceWrap = document.getElementById("facturador-fields");
+  const sourceRadios = document.querySelectorAll('input[name="solicitar_factura-factura_source"]');
   const selFacturador = document.getElementById("id_solicitar_factura-facturador");
   const inContador = document.getElementById("id_solicitar_factura-contador");
   const inCorreo = document.getElementById("id_solicitar_factura-correo");
+  const productorContador = "{{ compra.productor.contador.nombre|default:''|escapejs }}";
+  const productorCorreo = "{{ compra.productor.contador.email|default:''|escapejs }}";
+
+  const toggleSource = () => {
+    if (!sourceWrap || !sourceRadios.length) return;
+    const selected = Array.from(sourceRadios).find(r => r.checked)?.value;
+    sourceWrap.style.display = (selected === "facturador") ? "block" : "none";
+    if (selected === "productor") {
+      if (inContador) inContador.value = productorContador;
+      if (inCorreo) inCorreo.value = productorCorreo;
+    }
+  };
+  sourceRadios.forEach(r => r.addEventListener("change", () => { toggleSource(); hydrate(); }));
+  toggleSource();
 
   const hydrate = async () => {
     if (!selFacturador || !inContador || !inCorreo) return;
+    const selectedSource = Array.from(sourceRadios || []).find(r => r.checked)?.value;
+    if (selectedSource === "productor") {
+      inContador.value = productorContador;
+      inCorreo.value = productorCorreo;
+      return;
+    }
+
     const key = String(selFacturador.value || "").trim();
     if (!key || key === "__create_facturador__") {
       inContador.value = "";
