@@ -27,6 +27,7 @@
           <th>State</th>
           <th>Total DLS</th>
           <th>Saldo</th>
+          <th>Prioridad</th>
           <th>Acciones rápidas</th>
         </tr>
       </thead>
@@ -41,9 +42,17 @@
             {% if compra.workflow_state == 'INVOICE_BLOCKED' and blocked_reasons|get_item:compra.id %}
             <div class="small text-danger mt-1">{{ blocked_reasons|get_item:compra.id }}</div>
             {% endif %}
+            {% if queue_blockers|get_item:compra.id %}
+            <div class="mt-1 d-flex flex-wrap gap-1">
+              {% for b in queue_blockers|get_item:compra.id %}
+              <span class="badge text-bg-warning">{{ b }}</span>
+              {% endfor %}
+            </div>
+            {% endif %}
           </td>
           <td class="text-nowrap">{{ compra.compra_en_libras|money }}</td>
           <td class="text-nowrap">{{ compra.saldo_por_pagar|money }}</td>
+          <td><span class="badge text-bg-dark">{{ priority_scores|get_item:compra.id }}</span></td>
           <td>
             <div class="d-flex flex-wrap gap-1">
               <a class="btn btn-sm btn-outline-primary" href="/compras/{{ compra.id }}/flujo/?step={{ compra.flujo_step_default }}">Abrir</a>
@@ -54,7 +63,7 @@
           </td>
         </tr>
       {% empty %}
-        <tr><td colspan="7" class="text-center py-4">Sin compras en esta categoria.</td></tr>
+        <tr><td colspan="8" class="text-center py-4">Sin compras en esta categoria.</td></tr>
       {% endfor %}
       </tbody>
     </table>

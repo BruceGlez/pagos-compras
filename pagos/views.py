@@ -130,6 +130,13 @@ def _get_compra_pdf_attachment(compra: Compra):
         return None
 
 
+def _norm_attachment_base(filename: str) -> str:
+    base = (filename or "").strip().rsplit(".", 1)[0].lower()
+    # Gmail/clients often append " (1)", " (2)" to duplicates.
+    base = re.sub(r"\s*\(\d+\)$", "", base)
+    return base
+
+
 def _extract_xml_basic(xml_bytes: bytes):
     try:
         root = ET.fromstring(xml_bytes)
@@ -317,6 +324,33 @@ def compras_operativas_view(request):
     )
 
 
+def _queue_blockers_for_compra(c: Compra):
+    b = []
+    has_compra_pdf = c.documentos.filter(etapa="compra_original", archivo__iendswith=".pdf").exists()
+    if not has_compra_pdf:
+        b.append("Falta compra original PDF")
+    if not (c.productor.rfc or "").strip():
+        b.append("Falta RFC productor")
+
+    has_xml = c.documentos.filter(etapa="factura", archivo__iendswith=".xml").exists()
+    has_pdf = c.documentos.filter(etapa="factura", archivo__iendswith=".pdf").exists()
+    if c.workflow_state in {WorkflowStateChoices.WAITING_INVOICE, WorkflowStateChoices.INVOICE_BLOCKED}:
+        if not has_xml:
+            b.append("Falta XML factura")
+        if not has_pdf:
+            b.append("Falta PDF factura")
+
+    if c.workflow_state in {WorkflowStateChoices.WAITING_BANK_CONFIRMATION, WorkflowStateChoices.READY_TO_PAY} and not c.bank_account_confirmed:
+        b.append("Falta confirmación bancaria")
+
+    if c.workflow_state == WorkflowStateChoices.READY_TO_PAY:
+        ben = _beneficiary_validation(c)
+        if ben.get("status") == "red":
+            b.append("Beneficiario no coincide")
+
+    return b
+
+
 @login_required
 def readiness_queue_view(request):
     qs = Compra.objects.select_related("productor").filter(cancelada=False).order_by("fecha_liq", "id")
@@ -343,19 +377,56 @@ def readiness_queue_view(request):
         "PAID": base_q.filter(workflow_state=WorkflowStateChoices.PAID).count(),
     }
 
+    queue_items = list(qs[:300])
+
+    priority_scores = {}
+    for c in queue_items:
+        score = Decimal("0")
+        # Base by state urgency
+        if c.workflow_state == WorkflowStateChoices.READY_TO_PAY:
+            score += Decimal("100")
+        elif c.workflow_state == WorkflowStateChoices.WAITING_BANK_CONFIRMATION:
+            score += Decimal("70")
+        elif c.workflow_state == WorkflowStateChoices.INVOICE_BLOCKED:
+            score += Decimal("40")
+        elif c.workflow_state == WorkflowStateChoices.WAITING_INVOICE:
+            score += Decimal("20")
+
+        # Older liquidation date => higher priority
+        if c.fecha_liq:
+            days = (timezone.localdate() - c.fecha_liq).days
+            if days > 0:
+                score += Decimal(str(min(days, 30)))
+
+        # Higher payable saldo => slightly higher priority
+        try:
+            saldo = Decimal(str(c.saldo_por_pagar or "0"))
+            if saldo > 0:
+                score += min(saldo / Decimal("10000"), Decimal("20"))
+        except Exception:
+            pass
+
+        priority_scores[c.id] = score.quantize(Decimal("0.01"))
+
     blocked = {
         c.id: (c.invoice_validations.first().blocked_reason if c.invoice_validations.first() else "")
-        for c in qs[:300]
+        for c in queue_items
     }
+
+    queue_blockers = {c.id: _queue_blockers_for_compra(c) for c in queue_items}
+
+    queue_items.sort(key=lambda x: (priority_scores.get(x.id, Decimal("0")), x.fecha_liq or timezone.localdate()), reverse=True)
 
     return render(
         request,
         "pagos/readiness_queue.html",
         {
-            "compras": qs[:300],
+            "compras": queue_items,
             "counts": counts,
             "active_state": state,
             "blocked_reasons": blocked,
+            "queue_blockers": queue_blockers,
+            "priority_scores": priority_scores,
         },
     )
 
@@ -480,6 +551,9 @@ def readiness_queue_action_view(request, compra_id):
     actor = str(getattr(request.user, "username", "operador") or "operador")
 
     if action == "bank_confirm":
+        if not (compra.cuenta_productor or "").strip():
+            messages.warning(request, "No se puede confirmar banco desde queue: falta cuenta bancaria seleccionada en la compra.")
+            return redirect("readiness_queue")
         compra.bank_account_confirmed = True
         if not compra.bank_confirmed_at:
             compra.bank_confirmed_at = timezone.now()
@@ -488,11 +562,15 @@ def readiness_queue_action_view(request, compra_id):
         compra.save(update_fields=["bank_account_confirmed", "bank_confirmed_at", "bank_confirmation_source", "updated_at"])
         messages.success(request, "Cuenta bancaria confirmada.")
     elif action == "mark_ready":
+        blockers = _queue_blockers_for_compra(compra)
+        if blockers:
+            messages.error(request, f"No se puede marcar READY_TO_PAY. Bloqueadores: {', '.join(blockers)}")
+            return redirect("readiness_queue")
         try:
             transition_compra(compra, WorkflowStateChoices.READY_TO_PAY, actor=actor, reason="Acción rápida desde queue")
             messages.success(request, "Compra marcada como READY_TO_PAY.")
-        except ValueError:
-            messages.warning(request, "No se pudo mover a READY_TO_PAY desde el estado actual.")
+        except ValueError as e:
+            messages.warning(request, f"No se pudo mover a READY_TO_PAY: {e}")
     elif action == "reopen_invoice":
         try:
             transition_compra(compra, WorkflowStateChoices.INVOICE_RECEIVED, actor=actor, reason="Reapertura de factura bloqueada")
@@ -677,6 +755,60 @@ def compra_delete_view(request, compra_id):
 def compra_flujo_view(request, compra_id):
     compra = get_object_or_404(Compra, pk=compra_id)
     ui_pending_step = compra.flujo_step_default
+
+    # Auto-align workflow state with advanced UI pending step, to avoid queue invisibility drift.
+    if ui_pending_step in {"solicitar_factura", "revisar_factura", "pago"} and compra.workflow_state in {
+        WorkflowStateChoices.IMPORTED,
+        WorkflowStateChoices.DEBT_CALCULATED,
+    }:
+        actor = str(getattr(request.user, "username", "operador") or "operador")
+        try:
+            if compra.workflow_state == WorkflowStateChoices.IMPORTED:
+                transition_compra(
+                    compra,
+                    WorkflowStateChoices.DEBT_CALCULATED,
+                    actor=actor,
+                    reason="Auto-align por paso pendiente avanzado",
+                )
+            transition_compra(
+                compra,
+                WorkflowStateChoices.WAITING_INVOICE,
+                actor=actor,
+                reason="Auto-align por paso pendiente avanzado",
+            )
+            compra.refresh_from_db()
+            ui_pending_step = compra.flujo_step_default
+        except ValueError:
+            pass
+
+    # If purchase is effectively paid, align state to PAID so readiness queue/reporting is consistent.
+    if ui_pending_step == "pago" and compra.workflow_state != WorkflowStateChoices.PAID:
+        try:
+            saldo = Decimal(str(compra.saldo_por_pagar or "0"))
+        except Exception:
+            saldo = Decimal("999999")
+        paid_like = compra.total_pagado_vigente > Decimal("0") and abs(saldo) <= Decimal("3")
+        if paid_like:
+            actor = str(getattr(request.user, "username", "operador") or "operador")
+            try:
+                chain = [
+                    WorkflowStateChoices.IMPORTED,
+                    WorkflowStateChoices.DEBT_CALCULATED,
+                    WorkflowStateChoices.WAITING_INVOICE,
+                    WorkflowStateChoices.INVOICE_RECEIVED,
+                    WorkflowStateChoices.INVOICE_VALID,
+                    WorkflowStateChoices.WAITING_BANK_CONFIRMATION,
+                    WorkflowStateChoices.READY_TO_PAY,
+                    WorkflowStateChoices.PAID,
+                ]
+                current = compra.workflow_state
+                if current in chain:
+                    for target in chain[chain.index(current) + 1 :]:
+                        transition_compra(compra, target, actor=actor, reason="Auto-align pago efectivo")
+                compra.refresh_from_db()
+            except Exception:
+                pass
+
     form_map = {
         "captura": (CompraFlujo1Form, "Captura actualizada."),
         "anticipos": (CompraFlujoAnticiposForm, "Anticipos revisados."),
@@ -954,8 +1086,8 @@ def compra_flujo_view(request, compra_id):
                         if not amount_ok:
                             continue
                         xml_name = x.get("filename")
-                        base = xml_name.rsplit(".", 1)[0].lower()
-                        pdf_match = next((p for p in pdfs if p.get("filename", "").rsplit(".", 1)[0].lower() == base), None)
+                        base = _norm_attachment_base(xml_name)
+                        pdf_match = next((p for p in pdfs if _norm_attachment_base(p.get("filename", "")) == base), None)
                         preview.append({
                             "key": f"{msg_id}||{xml_name}",
                             "message_id": msg_id,
@@ -988,6 +1120,17 @@ def compra_flujo_view(request, compra_id):
                 msg_items = [i for i in items if i.get("message_id") == pick.get("message_id")]
                 xml_item = next((i for i in msg_items if i.get("filename") == pick.get("xml_filename")), None)
                 pdf_item = next((i for i in msg_items if i.get("filename") == pick.get("pdf_filename")), None)
+                if xml_item and not pdf_item:
+                    xml_base = _norm_attachment_base(xml_item.get("filename") or "")
+                    pdf_item = next(
+                        (
+                            i
+                            for i in msg_items
+                            if str(i.get("filename", "")).lower().endswith(".pdf")
+                            and _norm_attachment_base(i.get("filename") or "") == xml_base
+                        ),
+                        None,
+                    )
                 if not xml_item:
                     messages.error(request, "No se encontró el XML seleccionado en inbox (posible cambio de estado).")
                     return redirect(f"/compras/{compra.id}/flujo/?step=revisar_factura")

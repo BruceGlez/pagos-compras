@@ -27,16 +27,46 @@ def _find(pattern: str, text: str):
 def parse_payment_receipt_text(text: str) -> dict:
     t = (text or "").replace("\u00a0", " ")
 
-    amount_raw = _find(r"Importe de la operaci[oó]n:\s*([0-9,]+\.?[0-9]{0,2})", t)
-    currency = _find(r"Importe de la operaci[oó]n:[^\n]*\s([A-Z]{3})\b", t) or "MXP"
-    from_account = _find(r"Cuenta de retiro:\s*([0-9]{6,30})", t)
-    to_account = _find(r"Cuenta de dep[oó]sito:\s*([0-9]{6,40})", t)
-    beneficiary = _find(r"Titular de la cuenta:\s*([^\n]+)", t)
+    # Amount + currency
+    amount_raw = (
+        _find(r"Importe de la operaci[oó]n:\s*([0-9,]+\.?[0-9]{0,2})", t)
+        or _find(r"Monto:[^\n\r$]*\$\s*([0-9,]+\.[0-9]{2})", t)
+        or _find(r"Monto:[^\n\r]*?([0-9]{1,3}(?:,[0-9]{3})+\.[0-9]{2})", t)
+        or _find(r"\$\s*([0-9,]+\.[0-9]{2})", t)
+    )
+    currency = (
+        _find(r"Importe de la operaci[oó]n:[^\n]*\s([A-Z]{3})\b", t)
+        or _find(r"Monto:[^\n]*\b(USD|MXN|MXP)\b", t)
+        or _find(r"\b(USD|MXN|MXP)\b", t)
+        or ""
+    )
+    tu = t.upper()
+    if not currency:
+        if "DOLARES" in tu or "DÓLARES" in tu:
+            currency = "USD"
+        elif "PESOS" in tu:
+            currency = "MXP"
+        else:
+            currency = "MXP"
+
+    # Accounts
+    from_account = _find(r"Cuenta de retiro:\s*([0-9]{6,30})", t) or _find(r"Cuenta cargo:\s*([0-9]{6,30})", t)
+    to_account = _find(r"Cuenta de dep[oó]sito:\s*([0-9]{6,40})", t) or _find(r"Cuenta abono:\s*([0-9]{6,40})", t)
+
+    # Beneficiary / holders
+    beneficiary = (
+        _find(r"Titular de la cuenta:\s*([^\n]+)", t)
+        or _find(r"Titular de la cuenta del abono:\s*([^\n]+?)(?:\s+Monto:|\s+Concepto:|\s+Firma:|$)", t)
+        or _find(r"Titular de la cuenta del cargo:\s*([^\n]+?)(?:\s+Titular de la cuenta del abono:|\s+Monto:|\s+Concepto:|\s+Firma:|$)", t)
+    )
+
     concept = _find(r"Concepto de pago:\s*([^\n]+)", t)
     ref_num = _find(r"Referencia num[eé]rica:\s*([^\n]+)", t)
     tracking = _find(r"Clave de rastreo:\s*([^\n]+)", t)
-    folio = _find(r"Folio interbancario:\s*([^\n]+)", t)
-    apply_date = _find(r"Fecha de aplicaci[oó]n:\s*([0-9]{2}/[0-9]{2}/[0-9]{4})", t)
+    folio = _find(r"Folio interbancario:\s*([A-Z0-9\-]{4,40})", t) or _find(r"Folio:\s*([A-Z0-9\-]{4,40})", t)
+
+    # Dates
+    apply_date = _find(r"Fecha de aplicaci[oó]n:\s*([0-9]{2}/[0-9]{2}/[0-9]{4})", t) or _find(r"Fecha:\s*([0-9]{2}/[0-9]{2}/[0-9]{4})", t)
 
     amount = None
     if amount_raw:
