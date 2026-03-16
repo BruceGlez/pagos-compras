@@ -561,6 +561,9 @@ class Compra(TimestampedModel):
     def flujo_codigo(self):
         if not self.captura_completa:
             return "captura"
+        has_compra_original_pdf = self.documentos.filter(etapa="compra_original", archivo__iendswith=".pdf").exists()
+        if not has_compra_original_pdf:
+            return "captura"
         if not self.anticipos_revisados:
             return "anticipos"
         if not self.deudas_revisadas:

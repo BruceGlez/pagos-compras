@@ -67,13 +67,16 @@
                     <div class="small">Productor: {{ compra.productor.nombre }}</div>
                     <div class="small">Pacas: {{ compra.pacas|default:'-' }}</div>
                     <div class="small">Total DLS: {{ compra.compra_en_libras|money }}</div>
+                    {% if not has_compra_original_pdf %}
+                    <div class="small text-warning mt-1"><strong>Falta adjuntar Compra original PDF</strong> para avanzar en el pipeline.</div>
+                    {% endif %}
                 </div>
                 <a class="btn btn-outline-secondary btn-sm" href="/compras/{{ compra.id }}/flujo/?step=captura&edit_captura=1">Editar captura</a>
                 {% else %}
                 <form method="post">
                     {% csrf_token %}
                     <input type="hidden" name="flow_form" value="{{ current_step }}">
-                    {% if current_step == "solicitar_factura" and solicitud_configurada and not edit_solicitud_factura %}
+                    {% if current_step == "solicitar_factura" and not edit_solicitud_factura and solicitud_configurada or current_step == "solicitar_factura" and not edit_solicitud_factura and compra.solicitud_factura_enviada %}
                         <div class="alert alert-secondary py-2">
                             <div><strong>Resumen solicitud de factura</strong></div>
                             <div class="small mt-1"><strong>Fuente de factura:</strong>
@@ -84,20 +87,20 @@
                                 {% endif %}
                             </div>
                             <div class="small"><strong>Productor base:</strong> {{ compra.productor.nombre }} (RFC: {{ compra.productor.rfc|default:'-' }})</div>
-                            <div class="small"><strong>Contador:</strong> {{ compra.contador|default:'-' }} · {{ compra.correo|default:'-' }}</div>
+                            <div class="small"><strong>Contador:</strong> {{ solicitud_resumen.contador|default:'-' }} · {{ solicitud_resumen.correo|default:'-' }}</div>
                             <hr class="my-2">
                             <div class="small"><strong>Reglas CFDI esperadas</strong></div>
-                            <div class="small">Moneda: <strong>{{ compra.expected_moneda|default:'-' }}</strong></div>
-                            <div class="small">Forma de pago: <strong>{{ compra.expected_forma_pago|default:'-' }}</strong>
-                                {% if compra.expected_forma_pago == '03' %} — Transferencia electrónica{% elif compra.expected_forma_pago == '01' %} — Efectivo{% elif compra.expected_forma_pago == '28' %} — Tarjeta de débito{% elif compra.expected_forma_pago == '04' %} — Tarjeta de crédito{% endif %}
+                            <div class="small">Moneda: <strong>{{ solicitud_resumen.expected_moneda|default:'-' }}</strong></div>
+                            <div class="small">Forma de pago: <strong>{{ solicitud_resumen.expected_forma_pago|default:'-' }}</strong>
+                                {% if solicitud_resumen.expected_forma_pago == '03' %} — Transferencia electrónica{% elif solicitud_resumen.expected_forma_pago == '01' %} — Efectivo{% elif solicitud_resumen.expected_forma_pago == '28' %} — Tarjeta de débito{% elif solicitud_resumen.expected_forma_pago == '04' %} — Tarjeta de crédito{% endif %}
                             </div>
-                            <div class="small">Método de pago: <strong>{{ compra.expected_metodo_pago|default:'-' }}</strong>
-                                {% if compra.expected_metodo_pago == 'PUE' %} — Pago en una sola exhibición{% elif compra.expected_metodo_pago == 'PPD' %} — Pago en parcialidades o diferido{% endif %}
+                            <div class="small">Método de pago: <strong>{{ solicitud_resumen.expected_metodo_pago|default:'-' }}</strong>
+                                {% if solicitud_resumen.expected_metodo_pago == 'PUE' %} — Pago en una sola exhibición{% elif solicitud_resumen.expected_metodo_pago == 'PPD' %} — Pago en parcialidades o diferido{% endif %}
                             </div>
-                            <div class="small">Uso CFDI: <strong>{{ compra.expected_uso_cfdi|default:'-' }}</strong>
-                                {% if compra.expected_uso_cfdi == 'G01' %} — Adquisición de mercancías{% elif compra.expected_uso_cfdi == 'S01' %} — Sin efectos fiscales{% endif %}
+                            <div class="small">Uso CFDI: <strong>{{ solicitud_resumen.expected_uso_cfdi|default:'-' }}</strong>
+                                {% if solicitud_resumen.expected_uso_cfdi == 'G01' %} — Adquisición de mercancías{% elif solicitud_resumen.expected_uso_cfdi == 'S01' %} — Sin efectos fiscales{% endif %}
                             </div>
-                            <div class="small">RFC receptor esperado: <strong>{{ compra.expected_rfc_receptor|default:'-' }}</strong></div>
+                            <div class="small">RFC receptor esperado: <strong>{{ solicitud_resumen.expected_rfc_receptor|default:'-' }}</strong></div>
                             <hr class="my-2">
                             <div class="small"><strong>Estado de envío:</strong>
                                 {% if compra.solicitud_factura_enviada %}
@@ -455,7 +458,47 @@
                     <span class="badge text-bg-secondary">Factura: {{ compra.get_estatus_factura_display }}</span>
                     <span class="badge text-bg-secondary">Pago: {{ compra.get_estatus_de_pago_display }}</span>
                 </div>
-                <h6>Checklist de revisión de factura</h6>
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Checklist de revisión de factura</h6>
+                    <form method="post" class="mb-0">
+                        {% csrf_token %}
+                        <input type="hidden" name="flow_form" value="leer_inbox_factura">
+                        <button class="btn btn-outline-dark btn-sm" type="submit">Leer inbox ahora</button>
+                    </form>
+                </div>
+                {% if inbox_factura_preview %}
+                <div class="alert alert-info py-2 mt-2">
+                    <div><strong>Preview inbox (RFC correcto)</strong></div>
+                    <form method="post" class="mt-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="flow_form" value="importar_inbox_factura">
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead><tr><th></th><th>XML</th><th>PDF</th><th>UUID</th><th>Total</th></tr></thead>
+                                <tbody>
+                                    {% for x in inbox_factura_preview %}
+                                    <tr>
+                                        <td><input type="radio" name="inbox_pick" value="{{ x.key }}" {% if forloop.first %}checked{% endif %}></td>
+                                        <td>{{ x.xml_filename }}</td>
+                                        <td>{{ x.pdf_filename|default:'-' }}</td>
+                                        <td>{{ x.uuid|default:'-' }}</td>
+                                        <td>{{ x.total|default:'-' }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-success btn-sm" type="submit">Importar selección</button>
+                    </form>
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="flow_form" value="descartar_inbox_factura">
+                                <button class="btn btn-outline-secondary btn-sm" type="submit">Descartar</button>
+                            </form>
+                        </div>
+                </div>
+                {% endif %}
                 <div class="small mb-2 d-flex gap-2 flex-wrap">
                     {% if factura_has_xml %}<span class="badge text-bg-success">XML recibido</span>{% else %}<span class="badge text-bg-warning">XML pendiente</span>{% endif %}
                     {% if factura_has_pdf %}<span class="badge text-bg-success">PDF recibido</span>{% else %}<span class="badge text-bg-warning">PDF pendiente</span>{% endif %}
@@ -482,13 +525,20 @@
                 {% if current_step == "deudas" %}
                 <hr>
                 <h6>Sincronizar deudas desde Microsip</h6>
+                {% if not compra.productor.rfc %}
+                <div class="alert alert-warning py-2 small">
+                    Falta RFC del productor. Completa el catálogo antes de mapear/sincronizar Microsip.
+                    <a class="btn btn-sm btn-outline-warning ms-2" href="/productores/{{ compra.productor.id }}/editar/?next=/compras/{{ compra.id }}/flujo/%3Fstep%3Ddeudas">Completar productor</a>
+                </div>
+                {% endif %}
+                <div class="small text-muted mb-1">Consultar Microsip sincroniza deudas para el cliente ya mapeado. Mapear cliente Microsip sirve para elegir/corregir ese cliente.</div>
                 <div class="d-flex gap-2 mb-2">
                     <form method="post">
                         {% csrf_token %}
                         <input type="hidden" name="flow_form" value="microsip_sync_debt">
-                        <button class="btn btn-outline-dark btn-sm" type="submit">Consultar Microsip</button>
+                        <button class="btn btn-outline-dark btn-sm" type="submit" {% if not compra.productor.rfc %}disabled title="Completa RFC del productor primero"{% endif %}>Consultar Microsip</button>
                     </form>
-                    <a class="btn btn-outline-secondary btn-sm" href="/compras/{{ compra.id }}/mapear-microsip/">Mapear cliente Microsip</a>
+                    <a class="btn btn-outline-secondary btn-sm {% if not compra.productor.rfc %}disabled{% endif %}" {% if compra.productor.rfc %}href="/compras/{{ compra.id }}/mapear-microsip/"{% else %}aria-disabled="true" title="Completa RFC del productor primero"{% endif %}>Mapear cliente Microsip</a>
                 </div>
                 {% if last_microsip_snapshot %}
                 <div class="small text-muted">

@@ -54,7 +54,12 @@ COMBINADO AS (
   FROM SALDO_CLIENTE s
   FULL JOIN REM_CLIENTE r ON r.CLIENTE_ID = s.CLIENTE_ID AND r.MONEDA_ID = s.MONEDA_ID
 )
-SELECT COALESCE(c.CLIENTE_ID, 0) AS CLIENTE_ID, TRIM(c.CLIENTE) AS CLIENTE, c.MONEDA_ID,
+SELECT COALESCE(c.CLIENTE_ID, 0) AS CLIENTE_ID, TRIM(c.CLIENTE) AS CLIENTE,
+       COALESCE((SELECT FIRST 1 TRIM(dc.RFC_CURP)
+                 FROM DIRS_CLIENTES dc
+                 WHERE dc.CLIENTE_ID = c.CLIENTE_ID
+                 ORDER BY dc.USAR_PARA_FACTURAR DESC, dc.ES_DIR_PPAL DESC, dc.DIR_CLI_ID), '') AS RFC,
+       c.MONEDA_ID,
        COALESCE(c.SALDO_PENDIENTE, 0) AS SALDO_PENDIENTE,
        COALESCE(c.REMISION_PENDIENTE, 0) AS REMISION_PENDIENTE,
        (COALESCE(c.SALDO_PENDIENTE,0)+COALESCE(c.REMISION_PENDIENTE,0)) AS TOTAL
@@ -137,12 +142,15 @@ def _aggregate_clients(rows):
                 "cliente": key,
                 "cliente_ids": set(),
                 "aliases": set(),
+                "rfcs": set(),
                 "usd": Decimal("0"),
                 "mxn": Decimal("0"),
             },
         )
         obj["cliente_ids"].add(str(r.get("CLIENTE_ID") or ""))
         obj["aliases"].add(raw)
+        if (r.get("RFC") or "").strip():
+            obj["rfcs"].add((r.get("RFC") or "").strip().upper())
         total = Decimal(str(r.get("TOTAL") or 0))
         if int(r.get("MONEDA_ID") or 0) == 620:
             obj["usd"] += total
@@ -151,11 +159,14 @@ def _aggregate_clients(rows):
 
     out = []
     for v in by_client.values():
+        rfcs_sorted = sorted([x for x in v["rfcs"] if x])
         out.append(
             {
                 "cliente": v["cliente"],
                 "cliente_id": "|".join(sorted([x for x in v["cliente_ids"] if x])),
                 "aliases": sorted(v["aliases"]),
+                "rfc": (rfcs_sorted[0] if rfcs_sorted else ""),
+                "rfcs": rfcs_sorted,
                 "usd": v["usd"],
                 "mxn": v["mxn"],
             }
@@ -174,24 +185,76 @@ def list_all_microsip_debt_clients(search: str = "", limit: int = 100):
     all_clients = _aggregate_clients(_rows_all_cached())
     if (search or "").strip():
         token = _norm_name(search)
-        all_clients = [c for c in all_clients if token in _norm_name(c["cliente"]) or any(token in _norm_name(a) for a in c["aliases"])]
+        all_clients = [
+            c for c in all_clients
+            if token in _norm_name(c["cliente"]) or any(token in _norm_name(a) for a in c["aliases"]) or token in _norm_name(c.get("rfc", ""))
+        ]
     return all_clients[:limit]
+
+
+def list_microsip_clients_by_rfc(rfc: str, limit: int = 40):
+    r = _norm_name(rfc)
+    if not r:
+        return []
+    sql = f"""
+    SELECT FIRST {int(limit)}
+      cl.CLIENTE_ID,
+      TRIM(cl.NOMBRE) AS CLIENTE,
+      TRIM(COALESCE(dc.RFC_CURP,'')) AS RFC
+    FROM CLIENTES cl
+    LEFT JOIN DIRS_CLIENTES dc ON dc.CLIENTE_ID = cl.CLIENTE_ID
+    WHERE UPPER(TRIM(COALESCE(dc.RFC_CURP,''))) = '{r}'
+    ORDER BY cl.NOMBRE
+    """
+    rows = _fetch(sql)
+
+    # Unificar IDs (1/2) bajo el mismo cliente base para mapear ambos al productor.
+    by_base = {}
+    for x in rows:
+        raw_name = (x.get("CLIENTE") or "").strip()
+        base = _client_base(raw_name)
+        obj = by_base.setdefault(
+            base,
+            {
+                "cliente": base,
+                "cliente_ids": set(),
+                "aliases": set(),
+                "rfc": (x.get("RFC") or "").strip().upper(),
+                "usd": Decimal("0"),
+                "mxn": Decimal("0"),
+            },
+        )
+        cid = str(x.get("CLIENTE_ID") or "").strip()
+        if cid:
+            obj["cliente_ids"].add(cid)
+        if raw_name:
+            obj["aliases"].add(raw_name)
+
+    out = []
+    for v in by_base.values():
+        out.append({
+            "cliente": v["cliente"],
+            "cliente_id": "|".join(sorted(v["cliente_ids"])),
+            "aliases": sorted(v["aliases"]),
+            "rfc": v["rfc"],
+            "usd": v["usd"],
+            "mxn": v["mxn"],
+        })
+
+    return sorted(out, key=lambda x: x["cliente"])
 
 
 def sync_microsip_debt_for_compra(compra: Compra):
     mapped_name = (compra.productor.microsip_cliente_nombre or "").strip()
+    if not mapped_name:
+        raise ValueError("Productor sin cliente Microsip mapeado. Selecciona cliente exacto en 'Mapear cliente Microsip'.")
+
     all_rows = _rows_all_cached()
 
-    if mapped_name:
-        base = _client_base(mapped_name)
-        rows = [r for r in all_rows if _client_base(r.get("CLIENTE", "")) == base]
-        match_mode = "exact_mapped_base"
-        token_used = base
-    else:
-        token = _safe_like_token(compra.productor.nombre)
-        rows = [r for r in all_rows if token in _norm_name(r.get("CLIENTE", ""))]
-        match_mode = "fuzzy"
-        token_used = token
+    base = _client_base(mapped_name)
+    rows = [r for r in all_rows if _client_base(r.get("CLIENTE", "")) == base]
+    match_mode = "exact_mapped_base"
+    token_used = base
 
     total_mxn, total_usd = Decimal("0"), Decimal("0")
     for r in rows:

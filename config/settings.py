@@ -141,7 +141,7 @@ GMAIL_OAUTH_TOKEN_FILE = os.getenv("GMAIL_OAUTH_TOKEN_FILE", str(BASE_DIR.parent
 
 # Validación de beneficiario (titular cuenta vs emisor XML)
 BENEFICIARY_MATCH_YELLOW_THRESHOLD = float(os.getenv("BENEFICIARY_MATCH_YELLOW_THRESHOLD", "0.45"))
-GMAIL_OAUTH_SENDER = os.getenv("GMAIL_OAUTH_SENDER", "brucegonzalezpeters1@gmail.com")
+GMAIL_OAUTH_SENDER = os.getenv("GMAIL_OAUTH_SENDER", "bgonzalez@unamsa.mx")
 
 LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"

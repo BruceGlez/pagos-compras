@@ -3,7 +3,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.mail import send_mail
+from django.core.mail import send_mail, EmailMultiAlternatives
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
 from django.db.models.deletion import ProtectedError
@@ -13,6 +13,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 import re
+import xml.etree.ElementTree as ET
 
 from django.utils import timezone
 from django.views.generic import ListView
@@ -55,12 +56,15 @@ from .services import (
     create_invoice_validation_for_compra,
     detect_compras_conflicts,
     gmail_ready,
+    gmail_inbox_ready,
+    fetch_gmail_attachments_for_compra,
     import_anticipos_excel,
     import_compras_excel,
     send_gmail,
     payable_breakdown,
     find_microsip_candidates_for_productor,
     list_all_microsip_debt_clients,
+    list_microsip_clients_by_rfc,
     preview_anticipos_excel,
     preview_compras_excel,
     sync_microsip_debt_for_compra,
@@ -112,6 +116,35 @@ def _attach_email_proof_to_expediente(
 LEGAL_TOKENS = {
     "SA", "CV", "DE", "RL", "S", "A", "P", "I", "SC", "SPR", "SAPI", "SAB", "COOP", "AC", "THE", "DEL", "LA", "LOS", "LAS", "Y", "E",
 }
+
+
+def _get_compra_pdf_attachment(compra: Compra):
+    doc = compra.documentos.filter(etapa="compra_original", archivo__iendswith=".pdf").order_by("-created_at").first()
+    if not doc or not doc.archivo:
+        return None
+    try:
+        data = doc.archivo.read()
+        filename = (doc.archivo.name or "compra.pdf").split("/")[-1]
+        return (filename, data, "application/pdf")
+    except Exception:
+        return None
+
+
+def _extract_xml_basic(xml_bytes: bytes):
+    try:
+        root = ET.fromstring(xml_bytes)
+    except Exception:
+        return {}
+    ns = {"cfdi": "http://www.sat.gob.mx/cfd/4", "tfd": "http://www.sat.gob.mx/TimbreFiscalDigital"}
+    comp = root
+    emisor = root.find("cfdi:Emisor", ns)
+    tfd = root.find("cfdi:Complemento/tfd:TimbreFiscalDigital", ns)
+    return {
+        "rfc_emisor": (emisor.attrib.get("Rfc", "") if emisor is not None else "").strip().upper(),
+        "nombre_emisor": (emisor.attrib.get("Nombre", "") if emisor is not None else "").strip(),
+        "total": (comp.attrib.get("Total", "") if comp is not None else "").strip(),
+        "uuid": (tfd.attrib.get("UUID", "") if tfd is not None else "").strip(),
+    }
 
 
 def _norm_name(value: str) -> str:
@@ -477,13 +510,26 @@ def compra_mapear_microsip_view(request, compra_id):
         messages.error(request, "No tienes permisos de edición.")
         return redirect(f"/compras/{compra.id}/flujo/?step=deudas")
 
+    if not (compra.productor.rfc or "").strip():
+        messages.error(request, "Antes de mapear Microsip, completa el RFC del productor.")
+        return redirect(f"/productores/{compra.productor.id}/editar/?next=/compras/{compra.id}/flujo/%3Fstep%3Ddeudas")
+
     if request.method == "POST":
         selected = (request.POST.get("cliente_microsip") or "").strip()
         if selected:
-            if "||" in selected:
-                selected_id, selected_name = selected.split("||", 1)
-            else:
-                selected_id, selected_name = "", selected
+            parts = selected.split("||")
+            selected_id = (parts[0] if len(parts) > 0 else "").strip()
+            selected_name = (parts[1] if len(parts) > 1 else "").strip()
+            selected_rfc = (parts[2] if len(parts) > 2 else "").strip().upper()
+
+            prod_rfc = (compra.productor.rfc or "").strip().upper()
+            if prod_rfc and selected_rfc and prod_rfc != selected_rfc:
+                messages.error(
+                    request,
+                    f"No se puede vincular: RFC productor ({prod_rfc}) no coincide con RFC Microsip ({selected_rfc}).",
+                )
+                return redirect(f"/compras/{compra.id}/mapear-microsip/")
+
             compra.productor.microsip_cliente_nombre = selected_name
             compra.productor.microsip_cliente_id = selected_id
             compra.productor.save(update_fields=["microsip_cliente_nombre", "microsip_cliente_id", "updated_at"])
@@ -493,13 +539,27 @@ def compra_mapear_microsip_view(request, compra_id):
     candidates = find_microsip_candidates_for_productor(compra.productor.nombre, limit=20)
     search = (request.GET.get("search") or "").strip()
     manual_candidates = list_all_microsip_debt_clients(search=search, limit=80) if (search or not candidates) else []
+    rfc_candidates = list_microsip_clients_by_rfc(compra.productor.rfc, limit=30) if (compra.productor.rfc or "").strip() else []
+
+    # Unificar candidatos: primero coincidencias por RFC, luego deuda activa; sin duplicados por cliente_id.
+    unified_candidates = []
+    seen_ids = set()
+    for c in (rfc_candidates + candidates):
+        cid = str(c.get("cliente_id") or "")
+        if cid and cid in seen_ids:
+            continue
+        if cid:
+            seen_ids.add(cid)
+        c2 = dict(c)
+        c2["source"] = "RFC" if c in rfc_candidates else "DEUDA"
+        unified_candidates.append(c2)
 
     return render(
         request,
         "pagos/mapear_microsip.html",
         {
             "compra": compra,
-            "candidates": candidates,
+            "candidates": unified_candidates,
             "manual_candidates": manual_candidates,
             "search": search,
         },
@@ -860,6 +920,131 @@ def compra_flujo_view(request, compra_id):
         elif form_name == "enviar_solicitud_email":
             messages.warning(request, "Envío real a contador deshabilitado temporalmente. Usa el botón de envío TEST.")
             return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
+        elif form_name == "leer_inbox_factura":
+            try:
+                if not gmail_inbox_ready():
+                    messages.error(request, "Gmail no tiene permisos de lectura (gmail.readonly). Reautoriza OAuth.")
+                    return redirect(f"/compras/{compra.id}/flujo/?step=revisar_factura")
+
+                expected_rfc = ((compra.facturador.rfc if compra.facturador_id else "") or compra.productor.rfc or "").strip().upper()
+                expected_total = Decimal(str(compra.compra_en_libras or "0"))
+                total_tolerance = max(Decimal("50"), expected_total * Decimal("0.10"))
+                items = fetch_gmail_attachments_for_compra(compra.numero_compra, max_messages=40)
+                by_msg = {}
+                for it in items:
+                    by_msg.setdefault(it.get("message_id"), []).append(it)
+
+                preview = []
+                for msg_id, atts in by_msg.items():
+                    xmls = [a for a in atts if str(a.get("filename", "")).lower().endswith(".xml")]
+                    pdfs = [a for a in atts if str(a.get("filename", "")).lower().endswith(".pdf")]
+                    for x in xmls:
+                        meta = _extract_xml_basic(x.get("bytes") or b"")
+                        rfc = (meta.get("rfc_emisor") or "").strip().upper()
+                        rfc_ok = bool(expected_rfc and rfc == expected_rfc)
+                        if not rfc_ok:
+                            continue
+
+                        total_raw = (meta.get("total") or "").strip()
+                        try:
+                            total_xml = Decimal(total_raw)
+                        except Exception:
+                            total_xml = None
+                        amount_ok = bool(total_xml is not None and abs(total_xml - expected_total) <= total_tolerance)
+                        if not amount_ok:
+                            continue
+                        xml_name = x.get("filename")
+                        base = xml_name.rsplit(".", 1)[0].lower()
+                        pdf_match = next((p for p in pdfs if p.get("filename", "").rsplit(".", 1)[0].lower() == base), None)
+                        preview.append({
+                            "key": f"{msg_id}||{xml_name}",
+                            "message_id": msg_id,
+                            "xml_filename": xml_name,
+                            "pdf_filename": (pdf_match.get("filename") if pdf_match else ""),
+                            "rfc_emisor": rfc,
+                            "uuid": meta.get("uuid", ""),
+                            "total": meta.get("total", ""),
+                        })
+
+                request.session[f"inbox_factura_preview_{compra.id}"] = preview
+                request.session.modified = True
+                if preview:
+                    messages.success(request, f"Inbox leído: {len(preview)} XML candidatos (RFC y monto dentro de tolerancia). Selecciona cuál importar.")
+                else:
+                    messages.info(request, "Inbox leído: no se encontraron XML con RFC+monto válidos para esta compra.")
+            except Exception as e:
+                messages.error(request, f"Error al leer inbox: {e}")
+            return redirect(f"/compras/{compra.id}/flujo/?step=revisar_factura")
+        elif form_name == "importar_inbox_factura":
+            try:
+                selected = (request.POST.get("inbox_pick") or "").strip()
+                preview = request.session.get(f"inbox_factura_preview_{compra.id}") or []
+                pick = next((p for p in preview if p.get("key") == selected), None)
+                if not pick:
+                    messages.error(request, "Selecciona un XML del preview para importar.")
+                    return redirect(f"/compras/{compra.id}/flujo/?step=revisar_factura")
+
+                items = fetch_gmail_attachments_for_compra(compra.numero_compra, max_messages=40)
+                msg_items = [i for i in items if i.get("message_id") == pick.get("message_id")]
+                xml_item = next((i for i in msg_items if i.get("filename") == pick.get("xml_filename")), None)
+                pdf_item = next((i for i in msg_items if i.get("filename") == pick.get("pdf_filename")), None)
+                if not xml_item:
+                    messages.error(request, "No se encontró el XML seleccionado en inbox (posible cambio de estado).")
+                    return redirect(f"/compras/{compra.id}/flujo/?step=revisar_factura")
+
+                saved = 0
+                for it in [xml_item, pdf_item]:
+                    if not it:
+                        continue
+                    filename = (it.get("filename") or "").strip()
+                    data = it.get("bytes") or b""
+                    if not filename or not data:
+                        continue
+                    exists = compra.documentos.filter(etapa="factura", archivo__iendswith=filename).exists()
+                    if exists:
+                        continue
+                    doc = DocumentoCompra(compra=compra, etapa="factura", descripcion=f"Inbox Gmail #{it.get('message_id')}")
+                    doc.archivo.save(filename, ContentFile(data), save=True)
+                    saved += 1
+
+                cfg = XmlValidationConfig.get_default()
+                global_rfc = ((cfg.global_rfc_receptor or "").strip().upper() or "UAM140522Q51")
+                expected_moneda = (compra.expected_moneda or "").strip().upper() or "USD"
+                resico_policy = ((compra.facturador.resico_policy if compra.facturador_id else "") or "AUTO").strip().upper()
+                requires_resico = resico_policy in {"RETENCION_125", "EXENCION_LEYENDA"}
+                v = create_invoice_validation_for_compra(
+                    compra,
+                    xml_item.get("bytes") or b"",
+                    expected_rfc_receptor=((compra.expected_rfc_receptor or "").strip().upper() or global_rfc),
+                    expected_regimen_fiscal_receptor=(cfg.global_regimen_fiscal_receptor or ""),
+                    expected_codigo_fiscal_receptor=(cfg.global_codigo_fiscal_receptor or ""),
+                    expected_nombre_receptor=(cfg.global_nombre_receptor or ""),
+                    expected_efecto_comprobante=(cfg.global_efecto_comprobante or ""),
+                    expected_impuesto_trasladado=(cfg.global_impuesto_trasladado or ""),
+                    expected_moneda=expected_moneda,
+                    expected_uso_cfdi=(compra.expected_uso_cfdi or ""),
+                    expected_metodo_pago=(compra.expected_metodo_pago or ""),
+                    expected_forma_pago=(compra.expected_forma_pago or ""),
+                    expected_total_comprobante=str(compra.compra_en_libras or ""),
+                    total_tolerance_usd="3",
+                    requires_resico_retention=requires_resico,
+                    resico_policy=resico_policy,
+                )
+                if v.valid and not compra.uuid_factura:
+                    compra.uuid_factura = v.uuid or compra.uuid_factura
+                    compra.save(update_fields=["uuid_factura", "updated_at"])
+
+                request.session.pop(f"inbox_factura_preview_{compra.id}", None)
+                request.session.modified = True
+                messages.success(request, f"Inbox importado: {saved} adjuntos guardados y XML validado.")
+            except Exception as e:
+                messages.error(request, f"Error al importar inbox seleccionado: {e}")
+            return redirect(f"/compras/{compra.id}/flujo/?step=revisar_factura")
+        elif form_name == "descartar_inbox_factura":
+            request.session.pop(f"inbox_factura_preview_{compra.id}", None)
+            request.session.modified = True
+            messages.info(request, "Preview de inbox descartado.")
+            return redirect(f"/compras/{compra.id}/flujo/?step=revisar_factura")
         elif form_name == "enviar_solicitud_email_test":
             to_email = (settings.SOLICITUD_FACTURA_TEST_TO or "").strip()
             if not to_email:
@@ -872,10 +1057,18 @@ def compra_flujo_view(request, compra_id):
                 provider = "gmail_oauth" if gmail_ready() else "smtp"
                 provider_msg_id = ""
                 html_body = render_invoice_email_html(body)
+                compra_pdf_att = _get_compra_pdf_attachment(compra)
+                attachments = [compra_pdf_att] if compra_pdf_att else []
                 if provider == "gmail_oauth":
-                    provider_msg_id = send_gmail(to_email, subject, body, html_body=html_body)
+                    provider_msg_id = send_gmail(to_email, subject, body, html_body=html_body, attachments=attachments)
                 else:
-                    send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [to_email], fail_silently=False, html_message=html_body)
+                    msg = EmailMultiAlternatives(subject, body, settings.DEFAULT_FROM_EMAIL, [to_email])
+                    if html_body:
+                        msg.attach_alternative(html_body, "text/html")
+                    for att in attachments:
+                        if att:
+                            msg.attach(att[0], att[1], att[2])
+                    msg.send(fail_silently=False)
                 EmailOutboxLog.objects.create(
                     compra=compra,
                     to_email=to_email,
@@ -927,6 +1120,10 @@ def compra_flujo_view(request, compra_id):
             return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
         elif form_name == "microsip_sync_debt":
             try:
+                if not (compra.productor.rfc or "").strip():
+                    messages.error(request, "Completa RFC del productor antes de sincronizar deudas Microsip.")
+                    return redirect(f"/productores/{compra.productor.id}/editar/?next=/compras/{compra.id}/flujo/%3Fstep%3Ddeudas")
+
                 if not (compra.productor.microsip_cliente_nombre or "").strip():
                     cands = find_microsip_candidates_for_productor(compra.productor.nombre)
                     if len(cands) != 1:
@@ -1165,6 +1362,10 @@ def compra_flujo_view(request, compra_id):
                 return redirect(f"/compras/{compra.id}/flujo/?step=dividir")
             messages.error(request, "Error al crear division.")
         elif form_name in form_map:
+            if form_name == "deudas" and not (compra.productor.rfc or "").strip():
+                messages.error(request, "Completa RFC del productor para continuar en Revisar deudas.")
+                return redirect(f"/productores/{compra.productor.id}/editar/?next=/compras/{compra.id}/flujo/%3Fstep%3Ddeudas")
+
             form_cls, msg = form_map[form_name]
             forms[form_name] = form_cls(request.POST, instance=compra, prefix=form_name)
             if forms[form_name].is_valid():
@@ -1174,23 +1375,25 @@ def compra_flujo_view(request, compra_id):
                     source = (forms[form_name].cleaned_data.get("factura_source") or "productor").strip()
                     if source == "facturador" and compra.facturador:
                         compra.factura = compra.facturador.nombre
+                        compra.expected_rfc_receptor = (compra.facturador.rfc or "").strip().upper()
                         linked_contador = compra.facturador.contador
                         if linked_contador:
                             compra.contador = linked_contador.nombre
                             compra.correo = linked_contador.email
-                            compra.save(update_fields=["factura", "contador", "correo", "updated_at"])
+                            compra.save(update_fields=["factura", "expected_rfc_receptor", "contador", "correo", "updated_at"])
                         else:
-                            compra.save(update_fields=["factura", "updated_at"])
+                            compra.save(update_fields=["factura", "expected_rfc_receptor", "updated_at"])
                             messages.warning(request, "La entidad facturadora no tiene contador ligado. Vincúlalo en el catálogo de Entidades que facturan.")
                     else:
                         compra.facturador = None
                         compra.factura = compra.productor.nombre
+                        compra.expected_rfc_receptor = (compra.productor.rfc or "").strip().upper()
                         if compra.productor.contador:
                             compra.contador = compra.productor.contador.nombre
                             compra.correo = compra.productor.contador.email
-                            compra.save(update_fields=["facturador", "factura", "contador", "correo", "updated_at"])
+                            compra.save(update_fields=["facturador", "factura", "expected_rfc_receptor", "contador", "correo", "updated_at"])
                         else:
-                            compra.save(update_fields=["facturador", "factura", "updated_at"])
+                            compra.save(update_fields=["facturador", "factura", "expected_rfc_receptor", "updated_at"])
 
                 if form_name == "revisar_factura":
                     factura_files = list(compra.documentos.filter(etapa="factura").values_list("archivo", flat=True))
@@ -1308,6 +1511,22 @@ def compra_flujo_view(request, compra_id):
     pago_doc_latest = pago_docs_qs.first()
     has_pago_comprobante = bool(pago_doc_latest)
     solicitud_logs = list(compra.email_logs.order_by("-created_at")[:10])
+
+    inbox_factura_preview = request.session.get(f"inbox_factura_preview_{compra.id}") or []
+
+    solicitud_resumen = {
+        "contador": (compra.contador or (compra.productor.contador.nombre if compra.productor.contador else "") or "").strip(),
+        "correo": (compra.correo or (compra.productor.contador.email if compra.productor.contador else "") or "").strip(),
+        "expected_moneda": (compra.expected_moneda or ("USD" if compra.moneda == "DOLARES" else "MXN")).strip(),
+        "expected_forma_pago": (compra.expected_forma_pago or "03").strip(),
+        "expected_metodo_pago": (compra.expected_metodo_pago or "PUE").strip(),
+        "expected_uso_cfdi": (compra.expected_uso_cfdi or "G01").strip(),
+        "expected_rfc_receptor": (
+            compra.expected_rfc_receptor
+            or (compra.facturador.rfc if compra.facturador_id else compra.productor.rfc)
+            or ""
+        ).strip().upper(),
+    }
     has_xml = any(str(x).lower().endswith(".xml") for x in factura_docs)
     has_pdf = any(str(x).lower().endswith(".pdf") for x in factura_docs)
     revisar_factura_ready = bool(has_xml and has_pdf and compra.uuid_factura)
@@ -1323,6 +1542,7 @@ def compra_flujo_view(request, compra_id):
         productor_missing_fields.append("Correo de contador")
 
     docs_compra_original = list(compra.documentos.filter(etapa="compra_original").order_by("-created_at")[:5])
+    has_compra_original_pdf = compra.documentos.filter(etapa="compra_original", archivo__iendswith=".pdf").exists()
     docs_solicitud = list(compra.documentos.filter(etapa="solicitud_factura").order_by("-created_at")[:5])
     docs_factura = list(compra.documentos.filter(etapa="factura").order_by("-created_at")[:8])
     docs_pago = list(compra.documentos.filter(etapa="pago").order_by("-created_at")[:8])
@@ -1411,8 +1631,11 @@ def compra_flujo_view(request, compra_id):
             "facturador_sin_contador": facturador_sin_contador,
             "solicitud_factura_texto": build_invoice_request_message(compra),
             "solicitud_logs": solicitud_logs,
+            "solicitud_resumen": solicitud_resumen,
+            "inbox_factura_preview": inbox_factura_preview,
             "productor_missing_fields": productor_missing_fields,
             "has_pago_comprobante": has_pago_comprobante,
+            "has_compra_original_pdf": has_compra_original_pdf,
             "pago_doc_latest": pago_doc_latest,
             "edit_comprobante": bool((request.GET.get("edit_comprobante") or "").strip()),
             "can_manage_docs": bool(request.user.is_authenticated and (request.user.is_superuser or request.user.groups.filter(name="Admin").exists())),

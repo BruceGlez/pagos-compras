@@ -8,10 +8,11 @@
     <a class="btn btn-outline-secondary btn-sm" href="/compras/{{ compra.id }}/flujo/?step=deudas">Volver a deudas</a>
   </div>
   <div class="card-body">
-    <p><strong>Productor:</strong> {{ compra.productor.nombre }}</p>
+    <p><strong>Productor:</strong> {{ compra.productor.nombre }} · RFC: {{ compra.productor.rfc|default:'(sin RFC)' }}</p>
     <p class="small text-muted">Selecciona el cliente de Microsip donde vive la deuda activa.</p>
 
-    <h6>Selector manual de clientes con deuda activa</h6>
+    <h6>Selector de cliente Microsip</h6>
+    <div class="small text-muted mb-2">Candidatos unificados: incluye coincidencias por RFC y clientes con deuda activa.</div>
     <form method="get" class="mb-3">
       <div class="input-group input-group-sm">
         <input name="search" value="{{ search }}" class="form-control" placeholder="Buscar cliente Microsip...">
@@ -21,20 +22,24 @@
 
     <form method="post">
       {% csrf_token %}
+
       <h6>Candidatos automáticos</h6>
       <div class="table-responsive">
         <table class="table table-sm table-striped">
-          <thead><tr><th></th><th>Cliente Microsip</th><th>Total USD</th><th>Total MXN</th></tr></thead>
+          <thead><tr><th></th><th>Cliente Microsip</th><th>IDs</th><th>Fuente</th><th>RFC</th><th>Total USD</th><th>Total MXN</th></tr></thead>
           <tbody>
             {% for c in candidates %}
             <tr>
-              <td><input type="radio" name="cliente_microsip" value="{{ c.cliente_id }}||{{ c.cliente }}"></td>
+              <td><input type="radio" name="cliente_microsip" value="{{ c.cliente_id }}||{{ c.cliente }}||{{ c.rfc }}"></td>
               <td>{{ c.cliente }}</td>
+              <td><code>{{ c.cliente_id|default:'-' }}</code></td>
+              <td>{% if c.source == 'RFC' %}<span class="badge text-bg-info">RFC</span>{% else %}<span class="badge text-bg-secondary">Deuda</span>{% endif %}</td>
+              <td>{{ c.rfc|default:'-' }}</td>
               <td>{{ c.usd|money }}</td>
               <td>{{ c.mxn|money }}</td>
             </tr>
             {% empty %}
-            <tr><td colspan="4" class="text-center">No se encontraron candidatos automáticos.</td></tr>
+            <tr><td colspan="7" class="text-center">No se encontraron candidatos automáticos.</td></tr>
             {% endfor %}
           </tbody>
         </table>
@@ -44,17 +49,18 @@
       <h6>Lista manual</h6>
       <div class="table-responsive">
         <table class="table table-sm table-bordered">
-          <thead><tr><th></th><th>Cliente Microsip</th><th>Total USD</th><th>Total MXN</th></tr></thead>
+          <thead><tr><th></th><th>Cliente Microsip</th><th>RFC</th><th>Total USD</th><th>Total MXN</th></tr></thead>
           <tbody>
             {% for c in manual_candidates %}
             <tr>
-              <td><input type="radio" name="cliente_microsip" value="{{ c.cliente_id }}||{{ c.cliente }}" {% if not candidates and forloop.first %}checked{% endif %}></td>
+              <td><input type="radio" name="cliente_microsip" value="{{ c.cliente_id }}||{{ c.cliente }}||{{ c.rfc }}" {% if not candidates and forloop.first %}checked{% endif %}></td>
               <td>{{ c.cliente }}</td>
+              <td>{{ c.rfc|default:'-' }}</td>
               <td>{{ c.usd|money }}</td>
               <td>{{ c.mxn|money }}</td>
             </tr>
             {% empty %}
-            <tr><td colspan="4" class="text-center">Sin resultados manuales.</td></tr>
+            <tr><td colspan="5" class="text-center">Sin resultados manuales.</td></tr>
             {% endfor %}
           </tbody>
         </table>

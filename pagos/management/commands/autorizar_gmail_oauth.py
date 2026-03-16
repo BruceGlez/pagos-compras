@@ -17,7 +17,10 @@ class Command(BaseCommand):
 
         flow = InstalledAppFlow.from_client_secrets_file(
             str(client_file),
-            scopes=["https://www.googleapis.com/auth/gmail.send"],
+            scopes=[
+                "https://www.googleapis.com/auth/gmail.send",
+                "https://www.googleapis.com/auth/gmail.readonly",
+            ],
         )
         creds = flow.run_local_server(port=0, open_browser=False)
         token_file.parent.mkdir(parents=True, exist_ok=True)

@@ -15,7 +15,11 @@ def _ctx(compra):
     productor = compra.productor
     facturador = compra.facturador
     nombre_factura = facturador.nombre if facturador else (compra.factura or productor.nombre)
-    rfc_factura = facturador.rfc if facturador else ""
+    rfc_factura = (
+        (compra.expected_rfc_receptor or "").strip().upper()
+        or ((facturador.rfc if facturador else "") or "").strip().upper()
+        or (productor.rfc or "").strip().upper()
+    )
     subtotal = Decimal(str(compra.compra_en_libras or 0))
     ret_125 = (subtotal * Decimal("0.0125")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     total = (subtotal - ret_125).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
