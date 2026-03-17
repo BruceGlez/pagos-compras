@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cfdi:Comprobante xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd" xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0" Serie="FF" Folio="27004" Fecha="2026-03-09T16:11:17" Sello="dCWdRnEJ6pvCs0wTQBnKn6/qAvolBgvRADHQfehzMi0oLht12xtmPe8ImcXQW7RQJ2QfC+gj/LrY9pLzxd8SfFpORIMjdDkdzx/twCoHuTgEecJ7GsGtOeDH0YpY5q7HitSo2ak0mxzvqRdCVZ4azZiWA7+6+Tss7UfY1fUPFJc9XYbCSaMN+2Bv25aEF7NwbABS3B2hKEC6fifukLov6fPMFly9YuNbKHjjASTvrxmWvZoez7HSyOKQDo1DGUjtGVbDbiNpo4sYZ78/BQ7HCQoZUvsXN8mr1irbvy45ct8S39bRBUFSw8Gq8fRf39vTreZB5f6H+OrJqSJdLAn3JQ==" FormaPago="99" NoCertificado="00001000000712387378" Certificado="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" CondicionesDePago="CREDITO A 30 DIAS" SubTotal="536.91" Moneda="MXN" Total="622.82" TipoDeComprobante="I" Exportacion="01" MetodoPago="PPD" LugarExpedicion="32800">
+	<cfdi:Emisor Rfc="WIEP890803J86" Nombre="PETER WIEBE ENNS" RegimenFiscal="612"/>
+	<cfdi:Receptor Rfc="UAM140522Q51" Nombre="UNION ALGODONERA MOCTEZUMA" DomicilioFiscalReceptor="32840" RegimenFiscalReceptor="601" UsoCFDI="G03"/>
+	<cfdi:Conceptos>
+		<cfdi:Concepto ClaveProdServ="31161520" NoIdentificacion="TG5/8X21/2" Cantidad="25" ClaveUnidad="H87" Unidad="PIEZA" Descripcion="TOR. GAL. G5 5/8 X 2-1/2 TG5/8X21/2" ValorUnitario="12.05" Importe="301.25" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="301.25" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="48.20"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="31161727" NoIdentificacion="TLG5/8" Cantidad="25" ClaveUnidad="H87" Unidad="PIEZA" Descripcion="TUERCA LIVIANA GAL. 5/8&quot; TLG5/8" ValorUnitario="5.47995" Importe="137.00" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="137.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="21.92"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="31161801" NoIdentificacion="APN5/8" Cantidad="25" ClaveUnidad="H87" Unidad="PIEZA" Descripcion="ARAN.PRECION NEGRA 5/8 APN5/8" ValorUnitario="1.7732" Importe="44.33" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="44.33" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="7.0928"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="31161800" NoIdentificacion="APG5/8" Cantidad="0.51" ClaveUnidad="KGM" Unidad="KILO" Descripcion="ARANDELA PLANA GAL. EST. 5/8&quot;  APG5/8" ValorUnitario="106.52" Importe="54.33" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="54.33" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="8.6928"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+	</cfdi:Conceptos>
+	<cfdi:Impuestos TotalImpuestosTrasladados="85.91">
+		<cfdi:Traslados>
+			<cfdi:Traslado Base="536.91" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="85.91"/>
+		</cfdi:Traslados>
+	</cfdi:Impuestos>
+	<cfdi:Complemento><tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" xsi:schemaLocation="http://www.sat.gob.mx/TimbreFiscalDigital http://www.sat.gob.mx/sitio_internet/cfd/TimbreFiscalDigital/TimbreFiscalDigitalv11.xsd" SelloSAT="VOUTbTo8276kc5G7dY29KoJKQYjkPLPc+QhCwp7e91ieK4kBKOQpOjjVzfK4d35SMOnN5Ag5Bu/nN1vFR+jrj9Nk9xEHBVgav0XACSDz8VvO6rW/ciYl+bC2m1oATUpv3OU8O+LHnIPHhCS1XKiIavbLUXJKaTZ0x1gzPs0BMpyP+dldCcjDGR0M62imTDQbJWdRrvGARMq3G40I1A34ST6ha/ImMdeEUDvMTMBMuvYhopF+4YEL+UIjP06cQAOEDtkKsKvGv2bBh4ircTdFvOj9AUlP6WLp6U2aYdyNgzM2x3ya3/KpWQ+9cCVrnU60eVYp4rRrIyPvUOswls7oZA==" NoCertificadoSAT="00001000000702501858" SelloCFD="dCWdRnEJ6pvCs0wTQBnKn6/qAvolBgvRADHQfehzMi0oLht12xtmPe8ImcXQW7RQJ2QfC+gj/LrY9pLzxd8SfFpORIMjdDkdzx/twCoHuTgEecJ7GsGtOeDH0YpY5q7HitSo2ak0mxzvqRdCVZ4azZiWA7+6+Tss7UfY1fUPFJc9XYbCSaMN+2Bv25aEF7NwbABS3B2hKEC6fifukLov6fPMFly9YuNbKHjjASTvrxmWvZoez7HSyOKQDo1DGUjtGVbDbiNpo4sYZ78/BQ7HCQoZUvsXN8mr1irbvy45ct8S39bRBUFSw8Gq8fRf39vTreZB5f6H+OrJqSJdLAn3JQ==" RfcProvCertif="SCD110105654" FechaTimbrado="2026-03-09T17:16:09" UUID="D5BFF387-1BEB-2D44-B434-3C142399E51B" Version="1.1"/></cfdi:Complemento></cfdi:Comprobante>

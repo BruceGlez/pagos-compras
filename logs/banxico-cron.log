@@ -1,0 +1,6 @@
+TC sincronizado. creados=1, actualizados=6, total=7
+Error consultando Banxico: HTTPSConnectionPool(host='www.banxico.org.mx', port=443): Max retries exceeded with url: /SieAPIRest/service/v1/series/SF60653/datos/2026-03-07/2026-03-15 (Caused by NewConnectionError("HTTPSConnection(host='www.banxico.org.mx', port=443): Failed to establish a new connection: [Errno 101] Network is unreachable"))
+TC sincronizado. creados=3, actualizados=4, total=7
+TC sincronizado. creados=1, actualizados=6, total=7
+TC sincronizado. creados=1, actualizados=6, total=7
+TC sincronizado. creados=1, actualizados=6, total=7

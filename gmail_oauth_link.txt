@@ -1,0 +1,7 @@
+Gmail OAuth reauthorization link (send + readonly):
+
+https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=817179531209-0d7ka0fs6dk9hnc4gap56aastls1frd7.apps.googleusercontent.com&redirect_uri=http%3A%2F%2Flocalhost%3A35513%2F&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.send+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fgmail.readonly&state=56yoPY9Ig7PBo0bDKnuYxH8UN0t6aq&access_type=offline
+
+Notes:
+- Authorize with bgonzalez@unamsa.mx
+- This is one-time unless token/scopes are overwritten again.

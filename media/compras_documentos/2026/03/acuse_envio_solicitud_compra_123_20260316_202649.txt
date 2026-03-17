@@ -1,0 +1,50 @@
+ACUSE DE ENVIO - SOLICITUD DE FACTURA
+Fecha/Hora: 2026-03-16T20:26:49.761505+00:00
+Compra ID: 123
+Numero compra: 123
+Destinatario: bgonzalez@unamsa.mx
+Provider: gmail_oauth
+Provider Message ID: 19cf85472779cfa5
+Template: AE_STD
+Asunto: [TEST] Solicitud de factura compra #123 (BANMAN REYMER DAVID)
+
+--- CUERPO ---
+Buen día,
+
+Solicitamos factura de la compra #123.
+
+DATOS EMISOR
+- Facturar a nombre de: BANMAN REYMER DAVID
+- RFC: BARD750410TH0
+- Moneda: Dólar americano
+- Forma de pago: 03 Transferencia electrónica de fondos
+- Método de pago: PUE Pago en una sola exhibición
+- Uso CFDI: G01 Adquisición de mercancías
+- Monto compra: $71,154.03
+
+REQUISITOS ADICIONALES
+- Tasa IVA trasladado requerida: 0.000000 (0%)
+- Favor de enviar XML y PDF.
+- Incluir clases desglosadas con número de pacas en la descripción.
+  Ejemplo: ALGODON (CLASE SM X PACAS), ALGODON (CLASE MP X PACAS), etc.
+- Los castigos se deben aplicar como descuentos.
+
+REFERENCIA SAT
+- Clave producto/servicio: 11151507 (Fibras de algodón)
+- Clave unidad: LBR (Libra)
+
+DATOS RECEPTOR
+- RFC: UAM140522Q51
+- Nombre: UNION ALGODONERA MOCTEZUMA
+- C.P.: 32840
+- Régimen: 601 - GENERAL DE LEY
+
+Quedo a la orden.
+
+--
+Bruce González Peters
+Tels. 656 664 2322 - 656 664 2105
+Celular 625 110 6048
+Departamento de Pagos
+Unión Algodonera Moctezuma SA de CV
+Correo: bgonzalez@unamsa.mx

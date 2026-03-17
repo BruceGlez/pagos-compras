@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cfdi:Comprobante xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd" xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0" Serie="FF" Folio="27149" Fecha="2026-03-13T10:00:09" Sello="dmjn5MtzFDFyYfkoGtfHhs+sL4oJULNs83t6JBAUThehgLTHhCL22F/XqXZFQLQzUxcu+S/R14baChquY/VY3mEBlVoFb9boVK7BXgJrbCpEsmLltrHpxMQEd9TOLVfcBhAADJYVvJ8GpEXMaI/feHlEs3sm/7qhJE1U27ndDCJqkn6QID7Twu1mSYw4i5z0t73lD2Q4oh4ZY8xkt3RKITl7csYc7OE8qU8afKaMsmEH509jRwb1l+fU0mwmDoALHZum21Yn4M6hiSCUAldK0USSWEUys3ZItaTVBam+2x6YI7edhNC0pwEkoCH87J009U8dcHuOqlO/gEWu/sGsiA==" FormaPago="99" NoCertificado="00001000000712387378" Certificado="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" CondicionesDePago="CREDITO A 30 DIAS" SubTotal="954.23" Moneda="MXN" Total="1106.91" TipoDeComprobante="I" Exportacion="01" MetodoPago="PPD" LugarExpedicion="32800">
+	<cfdi:Emisor Rfc="WIEP890803J86" Nombre="PETER WIEBE ENNS" RegimenFiscal="612"/>
+	<cfdi:Receptor Rfc="UAM140522Q51" Nombre="UNION ALGODONERA MOCTEZUMA" DomicilioFiscalReceptor="32840" RegimenFiscalReceptor="601" UsoCFDI="G03"/>
+	<cfdi:Conceptos>
+		<cfdi:Concepto ClaveProdServ="27112800" NoIdentificacion="KN6470" Cantidad="1" ClaveUnidad="H87" Unidad="PIEZA" Descripcion="NUDO UNIVERSAL DE IMPACTO 1/2&quot; KNOVA KN6470" ValorUnitario="338.067" Importe="338.07" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="338.07" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="54.0912"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="31201500" NoIdentificacion="TI6010" Cantidad="1" ClaveUnidad="H87" Unidad="PIEZA" Descripcion="CINTA DE ALUMINIO 2 X 50 TI601 TI6010" ValorUnitario="139.66" Importe="139.66" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="139.66" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="22.3456"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="27111907" NoIdentificacion="7502248042598" Cantidad="5" ClaveUnidad="H87" Unidad="PIEZA" Descripcion="CARDA DE COPA 3&quot; TRENZADO ENT. 5/8&quot;-11NC DOGOTULS NI2028" ValorUnitario="95.299049" Importe="476.50" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="476.50" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="76.24"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+	</cfdi:Conceptos>
+	<cfdi:Impuestos TotalImpuestosTrasladados="152.68">
+		<cfdi:Traslados>
+			<cfdi:Traslado Base="954.23" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="152.68"/>
+		</cfdi:Traslados>
+	</cfdi:Impuestos>
+	<cfdi:Complemento><tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" xsi:schemaLocation="http://www.sat.gob.mx/TimbreFiscalDigital http://www.sat.gob.mx/sitio_internet/cfd/TimbreFiscalDigital/TimbreFiscalDigitalv11.xsd" SelloSAT="mx4EBQv+ZRe1jEhcBoX9Dc7Mxn/6gG6maCMcOh1qSKm7CQ5de1ZBakPk9A66/drBrX3Ijin8MAhd7RYXK6weXLoLNe3ZebTnQGo79i0CWQ5uBudJitYz0DvE+H/cyKzHRVynHBT34dJuM5FhsYQDvOdHospEjelkg4h37vN+xthKpC81Cyn6pi4MFw/8J3QXlUASQMXiNVEikfYRemu0bApC9tl5oeU3g9UKq1BdNo0R7M+7dz8GXVyiZsM2ZQhpcS8Xm6HEvVO6/zmd8CXdyHsc0va4PhlGQmPdUIvGl0I6zLGQFAD2e4udftGBH2q3V0EP0Oa9oSGWikcZpLfkvw==" NoCertificadoSAT="00001000000702501858" SelloCFD="dmjn5MtzFDFyYfkoGtfHhs+sL4oJULNs83t6JBAUThehgLTHhCL22F/XqXZFQLQzUxcu+S/R14baChquY/VY3mEBlVoFb9boVK7BXgJrbCpEsmLltrHpxMQEd9TOLVfcBhAADJYVvJ8GpEXMaI/feHlEs3sm/7qhJE1U27ndDCJqkn6QID7Twu1mSYw4i5z0t73lD2Q4oh4ZY8xkt3RKITl7csYc7OE8qU8afKaMsmEH509jRwb1l+fU0mwmDoALHZum21Yn4M6hiSCUAldK0USSWEUys3ZItaTVBam+2x6YI7edhNC0pwEkoCH87J009U8dcHuOqlO/gEWu/sGsiA==" RfcProvCertif="SCD110105654" FechaTimbrado="2026-03-13T10:11:14" UUID="4878F5CD-9826-5844-BCD9-B03DE22D2D0E" Version="1.1"/></cfdi:Complemento></cfdi:Comprobante>

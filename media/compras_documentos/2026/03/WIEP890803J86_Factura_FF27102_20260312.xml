@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cfdi:Comprobante xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd" xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0" Serie="FF" Folio="27102" Fecha="2026-03-12T09:48:02" Sello="DQV3KkqG8LXGkFECku+ScfAQhUU4eblpYU44tAR3dIVx2fBFShtG2WWpsdzQeCVgwZiGSn51gnA5fjsGWwSSaCBtceNXSJMv8PKRT8jqBpstNDW3QHFiIo+lnwRlXU3PSUaAB5iscs0ZN6ubHXCIq0BuOZQ82YtO04obnYmMMH8xqiC5uxRhpOE8kc2E371QHI2kAxpx6L4SP+Wi1t94h2FFZ452dGD3F3MCUx+pC9r8KXvkU62YavEou1FP/yn8WEi/AlxL6DsPn6ibomr/DqqanmE8lRlL7ok/S51Nq0KtGCwPkx030O0iEyQWnGQ2AKshk3e2mUutw/Al0XFoeg==" FormaPago="99" NoCertificado="00001000000712387378" Certificado="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" CondicionesDePago="CREDITO A 30 DIAS" SubTotal="1605.86" Moneda="MXN" Total="1862.80" TipoDeComprobante="I" Exportacion="01" MetodoPago="PPD" LugarExpedicion="32800">
+	<cfdi:Emisor Rfc="WIEP890803J86" Nombre="PETER WIEBE ENNS" RegimenFiscal="612"/>
+	<cfdi:Receptor Rfc="UAM140522Q51" Nombre="UNION ALGODONERA MOCTEZUMA" DomicilioFiscalReceptor="32840" RegimenFiscalReceptor="601" UsoCFDI="G03"/>
+	<cfdi:Conceptos>
+		<cfdi:Concepto ClaveProdServ="31161532" NoIdentificacion="TAL5/16X11/4" Cantidad="20" ClaveUnidad="H87" Unidad="PIEZA" Descripcion="TOR. ALLEN 5/16 X 1 1/4" ValorUnitario="4.50" Importe="90.00" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="90.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="14.40"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="31161532" NoIdentificacion="TAL5/16X11/2" Cantidad="30" ClaveUnidad="H87" Unidad="PIEZA" Descripcion="TOR. ALLEN 5/16 X 1 1/2" ValorUnitario="2.071436" Importe="62.14" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="62.14" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="9.9424"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="25171900" NoIdentificacion="14RODAJA114CH" Cantidad="4" ClaveUnidad="H87" Unidad="PIEZA" Descripcion="RUEDA FIJA 4&quot;   14RODAJA114CH 14RODAJA114CH" ValorUnitario="31.12" Importe="124.48" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="124.48" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="19.9168"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="26111801" NoIdentificacion="B81" Cantidad="2" ClaveUnidad="H87" Unidad="PIEZA" Descripcion="BANDA GATES B81 HI POWER II SECC B 21/32&quot; x 84&quot;" ValorUnitario="305.20" Importe="610.40" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="610.40" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="97.664"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="60122204" NoIdentificacion="0664355222" Cantidad="4" ClaveUnidad="H87" Unidad="PIEZA" Descripcion="DISCO DE CORTE 14&quot; WURTH 0664355222" ValorUnitario="97.99" Importe="391.96" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="391.96" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="62.7136"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="27111515" NoIdentificacion="7506240643975" Cantidad="4" ClaveUnidad="H87" Unidad="PIEZA" Descripcion="Rueda flap de 2&quot;, grano 60 TRUPER 13037" ValorUnitario="37.715517" Importe="150.86" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="150.86" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="24.1376"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="60141106" NoIdentificacion="KN1630-H" Cantidad="1" ClaveUnidad="H87" Unidad="PIEZA" Descripcion="DADO LARGO 6 PUNTAS 1/2&quot; X 15/16&quot;  KNOVA KN1630-H" ValorUnitario="136.03" Importe="136.03" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="136.03" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="21.7648"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="27112700" NoIdentificacion="88820" Cantidad="1" ClaveUnidad="H87" Unidad="PIEZA" Descripcion="DADO 1/2X15/16&quot; STAN.88820 88820" ValorUnitario="39.99" Importe="39.99" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="39.99" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="6.3984"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+	</cfdi:Conceptos>
+	<cfdi:Impuestos TotalImpuestosTrasladados="256.94">
+		<cfdi:Traslados>
+			<cfdi:Traslado Base="1605.86" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.160000" Importe="256.94"/>
+		</cfdi:Traslados>
+	</cfdi:Impuestos>
+	<cfdi:Complemento><tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" xsi:schemaLocation="http://www.sat.gob.mx/TimbreFiscalDigital http://www.sat.gob.mx/sitio_internet/cfd/TimbreFiscalDigital/TimbreFiscalDigitalv11.xsd" SelloSAT="q7M8aIhYXTDbjSYwlgjCah9Tk+meOQmU8mS1OkQiDQbpHTqXF+/cDkguEruYhzt7jnsjJ1j90bc6NJ7uNajUXKCUEc6HH6qtsWhJwL1EHaaIMN943yO9mONapq/mBAw7ftVdg+Ns0jd0HtGSQoMGh2AUHLHofbUg9t9/h9DpO1hG69zQlW+rQDUG/rUWAcPp8XxWX9LYuyetlycQDjMZCbnLy1CE3fnTr2VA2dTCa2fsnixd0UZJ3zuZh830aeW2Moz5xMZpHsF3RGnCWWm/KPeLS+TuYbynWWqsIRn0CABJw1WDAx8hvcnDTI1D2l2AtQGqugVEK8tCN4YtOzPyhA==" NoCertificadoSAT="00001000000702501858" SelloCFD="DQV3KkqG8LXGkFECku+ScfAQhUU4eblpYU44tAR3dIVx2fBFShtG2WWpsdzQeCVgwZiGSn51gnA5fjsGWwSSaCBtceNXSJMv8PKRT8jqBpstNDW3QHFiIo+lnwRlXU3PSUaAB5iscs0ZN6ubHXCIq0BuOZQ82YtO04obnYmMMH8xqiC5uxRhpOE8kc2E371QHI2kAxpx6L4SP+Wi1t94h2FFZ452dGD3F3MCUx+pC9r8KXvkU62YavEou1FP/yn8WEi/AlxL6DsPn6ibomr/DqqanmE8lRlL7ok/S51Nq0KtGCwPkx030O0iEyQWnGQ2AKshk3e2mUutw/Al0XFoeg==" RfcProvCertif="SCD110105654" FechaTimbrado="2026-03-12T10:02:24" UUID="55FE4348-7EDA-C041-9748-030F04407039" Version="1.1"/></cfdi:Complemento></cfdi:Comprobante>

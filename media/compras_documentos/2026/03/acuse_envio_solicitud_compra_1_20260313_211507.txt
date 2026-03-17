@@ -1,0 +1,63 @@
+ACUSE DE ENVIO - SOLICITUD DE FACTURA
+Fecha/Hora: 2026-03-13T21:15:07.996566+00:00
+Compra ID: 1
+Numero compra: 1
+Destinatario: bgonzalez@unamsa.mx
+Provider: gmail_oauth
+Provider Message ID: 19ce90d97feb36a0
+Template: RESICO_STD
+Asunto: [TEST] Solicitud de factura compra #1 (EVA REMPEL UNGER)
+
+--- CUERPO ---
+Buen día,
+
+Solicitamos factura de la compra #1.
+
+DATOS EMISOR
+- Facturar a nombre de: EVA REMPEL UNGER
+- RFC: REUE950812MH3
+- Moneda: Dólar americano
+- Forma de pago: 03 Transferencia electrónica de fondos
+- Método de pago: PUE Pago en una sola exhibición
+- Uso CFDI: G01 Adquisición de mercancías
+- Monto compra: $2,473.90
+
+REGLA RESICO
+Para RESICO: incluir retención ISR 1.25% o, cuando aplique, leyenda de exención del Art. 113-E LISR.
+
+CASO RETENCIÓN
+- Subtotal: $2,473.90 dólares americanos
+- Retención ISR 1.25%: $30.92
+- Total: $2,442.98
+
+CASO LEYENDA DE EXENCIÓN
+Debe incluir en la descripción exactamente:
+"LOS INGRESOS QUE AMPARA ESTE COMPROBANTE SE ENCUENTRAN EN EL SUPUESTO DE EXENCIÓN A QUE SE REFIERE EL ARTÍCULO 113-E, NOVENO PÁRRAFO DE LA LEY DE ISR"
+
+REQUISITOS ADICIONALES
+- Tasa IVA trasladado requerida: 0.000000 (0%)
+- Favor de enviar XML y PDF.
+- Incluir clases desglosadas con número de pacas en la descripción.
+  Ejemplo: ALGODON (CLASE SM X PACAS), ALGODON (CLASE MP X PACAS), etc.
+- Los castigos se deben aplicar como descuentos.
+
+REFERENCIA SAT
+- Clave producto/servicio: 11151507 (Fibras de algodón)
+- Clave unidad: LBR (Libra)
+
+DATOS RECEPTOR
+- RFC: UAM140522Q51
+- Nombre: UNION ALGODONERA MOCTEZUMA
+- C.P.: 32840
+- Régimen: 601 - GENERAL DE LEY
+
+Quedo a la orden.
+
+--
+Bruce González Peters
+Tels. 656 664 2322 - 656 664 2105
+Celular 625 110 6048
+Departamento de Pagos
+Unión Algodonera Moctezuma SA de CV
+Correo: bgonzalez@unamsa.mx
+

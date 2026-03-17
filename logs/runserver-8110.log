@@ -1,0 +1,48 @@
+Watching for file changes with StatReloader
+[12/Mar/2026 09:11:03] "HEAD / HTTP/1.1" 302 0
+[12/Mar/2026 09:11:03] "HEAD / HTTP/1.1" 302 0
+[12/Mar/2026 09:22:15] "GET / HTTP/1.1" 200 9255
+[12/Mar/2026 09:22:15] "GET /static/css/app.css HTTP/1.1" 304 0
+Not Found: /favicon.ico
+[12/Mar/2026 09:22:16] "GET /favicon.ico HTTP/1.1" 404 11107
+[12/Mar/2026 09:29:07] "GET / HTTP/1.1" 200 9255
+[12/Mar/2026 09:29:10] "GET /compras/ HTTP/1.1" 200 46319
+[12/Mar/2026 09:29:13] "GET /compras/?q=1&productor=&fecha_desde=&fecha_hasta=&estatus_de_pago=&workflow_state= HTTP/1.1" 200 12188
+[12/Mar/2026 09:29:17] "GET /compras/1/flujo/?step=pago HTTP/1.1" 200 17511
+[12/Mar/2026 09:29:19] "GET /compras/1/flujo/?step=solicitar_factura HTTP/1.1" 200 25170
+[12/Mar/2026 09:29:19] "GET /api/facturadores/17/contacto/ HTTP/1.1" 200 75
+[12/Mar/2026 09:29:19] "GET /api/facturadores/17/contacto/ HTTP/1.1" 200 75
+[12/Mar/2026 09:29:25] "GET /compras/1/flujo/?step=revisar_factura HTTP/1.1" 200 17481
+[12/Mar/2026 09:29:29] "GET /compras/1/validacion-factura/ HTTP/1.1" 200 6559
+[12/Mar/2026 09:36:48] "GET /compras/1/validacion-factura/ HTTP/1.1" 200 8305
+[12/Mar/2026 09:37:10] "GET /compras/1/flujo/?step=revisar_factura HTTP/1.1" 200 17481
+[12/Mar/2026 09:37:14] "GET /compras/1/flujo/?step=solicitar_factura HTTP/1.1" 200 25170
+[12/Mar/2026 09:37:14] "GET /api/facturadores/17/contacto/ HTTP/1.1" 200 75
+[12/Mar/2026 09:37:14] "GET /api/facturadores/17/contacto/ HTTP/1.1" 200 75
+[12/Mar/2026 09:37:15] "GET /compras/1/flujo/?step=revisar_factura HTTP/1.1" 200 17481
+/home/bruce/.openclaw/workspace/pagos-compras/pagos/forms.py changed, reloading.
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 12, 2026 - 09:10:47
+Django version 6.0.2, using settings 'config.settings'
+Starting development server at http://0.0.0.0:8110/
+Quit the server with CONTROL-C.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/6.0/howto/deployment/
+Watching for file changes with StatReloader
+[12/Mar/2026 09:40:01] "GET /compras/1/flujo/?step=revisar_factura HTTP/1.1" 200 17737
+[12/Mar/2026 09:40:13] "POST /compras/1/flujo/?step=revisar_factura HTTP/1.1" 302 0
+[12/Mar/2026 09:40:13] "GET /compras/1/flujo/?step=pago HTTP/1.1" 200 17640
+[12/Mar/2026 09:40:15] "GET /compras/1/flujo/?step=revisar_factura HTTP/1.1" 200 17737
+Performing system checks...
+
+System check identified no issues (0 silenced).
+March 12, 2026 - 09:39:17
+Django version 6.0.2, using settings 'config.settings'
+Starting development server at http://0.0.0.0:8110/
+Quit the server with CONTROL-C.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/6.0/howto/deployment/
