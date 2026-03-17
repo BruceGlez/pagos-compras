@@ -60,7 +60,19 @@
                     </td>
                     <td>{{ compra.fecha_liq }}</td>
                     <td>{{ compra.productor.nombre }}</td>
-                    <td>{{ compra.factura }}</td>
+                    <td>
+                        {% if compra.solicitud_factura_enviada %}
+                            {% if compra.factura %}
+                            {{ compra.factura }}
+                            {% elif compra.facturador_id %}
+                            {{ compra.facturador.nombre }}
+                            {% else %}
+                            {{ compra.productor.nombre }}
+                            {% endif %}
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
                     <td>{{ compra.uuid_factura }}</td>
                     <td class="text-nowrap">{{ compra.compra_en_libras|money }}</td>
                     <td class="text-nowrap">{{ compra.base_pago|money }}</td>
