@@ -234,6 +234,22 @@ class HomeView(LoginRequiredMixin, ListView):
         context["compras_total_libras"] = compras_stats["total"] or 0
         context["compras_count"] = compras_stats["conteo"] or 0
         context["tc_ultimo"] = TipoCambio.objects.order_by("-fecha").first()
+
+        today = timezone.localdate()
+        pending_qs = Compra.objects.filter(cancelada=False).exclude(workflow_state=WorkflowStateChoices.PAID).only("id", "fecha_liq")
+        aging = {"0_7": 0, "8_15": 0, "16_30": 0, "31_plus": 0}
+        for c in pending_qs:
+            days = (today - c.fecha_liq).days if c.fecha_liq else 0
+            if days <= 7:
+                aging["0_7"] += 1
+            elif days <= 15:
+                aging["8_15"] += 1
+            elif days <= 30:
+                aging["16_30"] += 1
+            else:
+                aging["31_plus"] += 1
+        context["aging"] = aging
+        context["sla_over_15"] = aging["16_30"] + aging["31_plus"]
         return context
 
 
