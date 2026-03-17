@@ -19,8 +19,9 @@ This command must request BOTH scopes.
 ## Token location
 - `/home/bruce/.openclaw/workspace/.secrets/gmail_oauth_token.json`
 
-## Do not overwrite token with send-only scope
-If any helper/script asks only for `gmail.send`, DO NOT run it in production.
+## Do not overwrite token with stale/partial scopes
+If any helper/script/link asks for `gmail.send` only, or `gmail.readonly` instead of `gmail.modify`, DO NOT run it in production.
+Use only the canonical management command.
 
 ## Verification checklist
 After any reauth:

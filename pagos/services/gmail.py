@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -14,11 +15,27 @@ def _load_creds(scopes=None):
     scopes = scopes or ["https://www.googleapis.com/auth/gmail.send"]
     token_file = Path(settings.GMAIL_OAUTH_TOKEN_FILE)
     creds = None
+
     if token_file.exists():
-        creds = Credentials.from_authorized_user_file(str(token_file), scopes)
+        try:
+            payload = json.loads(token_file.read_text())
+            token_scopes = set(payload.get("scopes") or [])
+            if token_scopes and not set(scopes).issubset(token_scopes):
+                return None
+        except Exception:
+            pass
+
+        try:
+            creds = Credentials.from_authorized_user_file(str(token_file), scopes)
+        except Exception:
+            return None
+
     if creds and creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        token_file.write_text(creds.to_json())
+        try:
+            creds.refresh(Request())
+            token_file.write_text(creds.to_json())
+        except Exception:
+            return None
     return creds
 
 
@@ -80,7 +97,7 @@ def fetch_gmail_attachments_for_compra(compra_numero: int, max_messages: int = 2
     ]
     creds = _load_creds(scopes)
     if not creds or not creds.valid:
-        raise RuntimeError("Gmail OAuth sin scope de lectura/modificación. Reautoriza Gmail con gmail.modify.")
+        raise RuntimeError("Gmail OAuth sin scopes requeridos (gmail.send + gmail.modify). Ejecuta: python manage.py autorizar_gmail_oauth")
 
     service = build("gmail", "v1", credentials=creds)
     n = int(compra_numero)
@@ -125,7 +142,7 @@ def mark_gmail_message_processed(message_id: str, label_name: str = "pagos-proce
     ]
     creds = _load_creds(scopes)
     if not creds or not creds.valid:
-        raise RuntimeError("Gmail OAuth sin scope de modificación. Reautoriza con gmail.modify.")
+        raise RuntimeError("Gmail OAuth sin scopes requeridos (gmail.send + gmail.modify). Ejecuta: python manage.py autorizar_gmail_oauth")
 
     service = build("gmail", "v1", credentials=creds)
 
