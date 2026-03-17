@@ -51,6 +51,18 @@ class DocumentoEtapaChoices(models.TextChoices):
     OTRO = "otro", _("Otro")
 
 
+class DocumentoTipoChoices(models.TextChoices):
+    COMPRA_USD = "COMPRA_USD", _("Compra en dólares (PDF)")
+    COMPRA_MXN = "COMPRA_MXN", _("Compra en pesos (PDF)")
+    FACTURA_XML = "FACTURA_XML", _("Factura XML")
+    FACTURA_PDF = "FACTURA_PDF", _("Factura PDF")
+    SAT_PDF = "SAT_PDF", _("Validación SAT (PDF)")
+    CARATULA_BANCARIA = "CARATULA_BANCARIA", _("Carátula bancaria")
+    COMPROBANTE_PAGO = "COMPROBANTE_PAGO", _("Comprobante de pago")
+    ACUSE_SOLICITUD = "ACUSE_SOLICITUD", _("Acuse solicitud factura")
+    OTRO = "OTRO", _("Otro")
+
+
 class WorkflowStateChoices(models.TextChoices):
     IMPORTED = "IMPORTED", _("Imported")
     DEBT_CALCULATED = "DEBT_CALCULATED", _("Debt Calculated")
@@ -688,6 +700,8 @@ class DocumentoCompra(TimestampedModel):
     )
     descripcion = models.CharField(max_length=200, blank=True)
     archivo = models.FileField(upload_to="compras_documentos/%Y/%m/")
+    tipo_documento = models.CharField(max_length=30, choices=DocumentoTipoChoices.choices, default=DocumentoTipoChoices.OTRO)
+    es_compra_mxn = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-created_at", "-id"]

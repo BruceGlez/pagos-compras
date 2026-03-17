@@ -19,7 +19,7 @@ class Command(BaseCommand):
             str(client_file),
             scopes=[
                 "https://www.googleapis.com/auth/gmail.send",
-                "https://www.googleapis.com/auth/gmail.readonly",
+                "https://www.googleapis.com/auth/gmail.modify",
             ],
         )
         creds = flow.run_local_server(port=0, open_browser=False)

@@ -29,7 +29,7 @@ def gmail_ready() -> bool:
 
 def gmail_inbox_ready() -> bool:
     scopes = [
-        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.modify",
         "https://www.googleapis.com/auth/gmail.send",
     ]
     creds = _load_creds(scopes)
@@ -75,17 +75,24 @@ def fetch_gmail_attachments_for_compra(compra_numero: int, max_messages: int = 2
     from googleapiclient.discovery import build
 
     scopes = [
-        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.modify",
         "https://www.googleapis.com/auth/gmail.send",
     ]
     creds = _load_creds(scopes)
     if not creds or not creds.valid:
-        raise RuntimeError("Gmail OAuth sin scope de lectura. Reautoriza Gmail con gmail.readonly.")
+        raise RuntimeError("Gmail OAuth sin scope de lectura/modificación. Reautoriza Gmail con gmail.modify.")
 
     service = build("gmail", "v1", credentials=creds)
-    query = f'is:unread has:attachment "#{int(compra_numero)}"'
-    listing = service.users().messages().list(userId="me", q=query, maxResults=max_messages).execute()
+    n = int(compra_numero)
+    query_strict = f'is:unread has:attachment ("#{n}" OR "compra {n}" OR "compra {n:05d}" OR "{n:05d}")'
+    listing = service.users().messages().list(userId="me", q=query_strict, maxResults=max_messages).execute()
     msgs = listing.get("messages", []) or []
+
+    # Fallback: si no hay hits por token de compra, abrir búsqueda a adjuntos recientes no leídos.
+    if not msgs:
+        query_fallback = "is:unread has:attachment newer_than:30d"
+        listing = service.users().messages().list(userId="me", q=query_fallback, maxResults=max_messages).execute()
+        msgs = listing.get("messages", []) or []
 
     out = []
     for m in msgs:
@@ -107,3 +114,37 @@ def fetch_gmail_attachments_for_compra(compra_numero: int, max_messages: int = 2
             raw = base64.urlsafe_b64decode(data.encode("utf-8")) if data else b""
             out.append({"message_id": m["id"], "filename": filename, "bytes": raw})
     return out
+
+
+def mark_gmail_message_processed(message_id: str, label_name: str = "pagos-processed"):
+    from googleapiclient.discovery import build
+
+    scopes = [
+        "https://www.googleapis.com/auth/gmail.modify",
+        "https://www.googleapis.com/auth/gmail.send",
+    ]
+    creds = _load_creds(scopes)
+    if not creds or not creds.valid:
+        raise RuntimeError("Gmail OAuth sin scope de modificación. Reautoriza con gmail.modify.")
+
+    service = build("gmail", "v1", credentials=creds)
+
+    labels = service.users().labels().list(userId="me").execute().get("labels", []) or []
+    label_id = next((x.get("id") for x in labels if (x.get("name") or "").strip().lower() == label_name.lower()), None)
+    if not label_id:
+        created = service.users().labels().create(
+            userId="me",
+            body={
+                "name": label_name,
+                "labelListVisibility": "labelShow",
+                "messageListVisibility": "show",
+            },
+        ).execute()
+        label_id = created.get("id")
+
+    body = {
+        "addLabelIds": [label_id] if label_id else [],
+        "removeLabelIds": ["UNREAD"],
+    }
+    service.users().messages().modify(userId="me", id=message_id, body=body).execute()
+    return {"message_id": message_id, "label_id": label_id, "label_name": label_name}

@@ -20,10 +20,14 @@ def _ctx(compra):
         (compra.expected_rfc_receptor or "").strip().upper()
         or ((cfg.global_rfc_receptor or "").strip().upper() or "UAM140522Q51")
     )
-    subtotal = Decimal(str(compra.compra_en_libras or 0))
+    expected_moneda = (compra.expected_moneda or ("USD" if compra.moneda == "DOLARES" else "MXN")).strip().upper()
+    tc = Decimal(str(compra.tipo_cambio_valor or 0))
+    subtotal_usd = Decimal(str(compra.compra_en_libras or 0))
+    subtotal_mxn = (subtotal_usd * tc).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) if tc > 0 else subtotal_usd
+    subtotal = subtotal_mxn if expected_moneda == "MXN" else subtotal_usd
     ret_125 = (subtotal * Decimal("0.0125")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     total = (subtotal - ret_125).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    moneda_desc = "dólares americanos" if compra.moneda == "DOLARES" else "pesos mexicanos"
+    moneda_desc = "pesos mexicanos" if expected_moneda == "MXN" else "dólares americanos"
     forma = compra.expected_forma_pago or "03"
     metodo = compra.expected_metodo_pago or "PUE"
     uso = compra.expected_uso_cfdi or "G01"
@@ -38,7 +42,9 @@ def _ctx(compra):
         "retencion_125": f"{ret_125:,.2f}",
         "total_con_retencion": f"{total:,.2f}",
         "moneda_detalle": moneda_desc,
-        "moneda": "Dólar americano" if compra.moneda == "DOLARES" else "Pesos mexicanos",
+        "moneda": "Pesos mexicanos" if expected_moneda == "MXN" else "Dólar americano",
+        "monto_compra_usd": f"{subtotal_usd:,.2f}",
+        "monto_compra_mxn": f"{subtotal_mxn:,.2f}",
         "regimen_fiscal": (facturador.regimen_fiscal if facturador else productor.regimen_fiscal)
         or compra.regimen_fiscal
         or "(sin régimen)",

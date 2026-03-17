@@ -1,0 +1,550 @@
+Cotton Purchase Payment Automation System
+
+Technical and Business Specification
+
+IMPLEMENTATION STATUS (2026-03-17)
+
+This section is the live handoff snapshot for new chats/sessions.
+
+Current stack decision
+- Production path: Django modular monolith (accepted ADR).
+- Runtime currently served via user systemd service on port 8110.
+
+Implemented and working (current)
+- Full auth/roles (`Admin`, `Operador`, `Consulta`) with login-required operational routes.
+- Compra workflow with explicit states, transition logging, and audit events.
+- Flow split remains explicit: `Solicitar factura` and `Revisar factura`.
+- Readiness queue with:
+  - state buckets
+  - quick actions
+  - blocker badges
+  - priority score ordering
+- Queue governance hardened:
+  - `mark_ready` blocked when blockers exist
+  - explicit blocker reasons shown in UI
+- State drift repair tooling:
+  - command `backfill_workflow_states`
+  - auto-alignment guard for advanced flow step vs early workflow state
+- Service availability hardened via user systemd (`pagos-compras.service`).
+
+Importers and catalogs
+- Compras importer:
+  - fixed total mapping aliases/fallbacks
+  - conflict policy behavior (`overwrite`/`keep_existing`/`ask`) aligned to UX
+  - admin-only import route enforced
+- Anticipos importer:
+  - dedicated header detection for anticipos files
+  - update-or-create style behavior for existing rows
+  - improved duplicate handling/matching
+- SAT regimen catalogs and facturador RESICO policy integrated.
+- Contadores and entidades que facturan catalogs active.
+
+Microsip debt integration
+- Explicit mapping required (no fuzzy fallback for sync).
+- RFC candidates from `DIRS_CLIENTES.RFC_CURP`.
+- RFC candidate rows now display real debt totals (fix for false 0 display).
+- Sync/map actions gated when productor RFC is missing.
+
+Factura and inbox workflow (major updates)
+- XML validation screen active with expected-vs-actual and history.
+- UUID auto-populates on successful validation.
+- Tolerance enforcement: total validation includes ±3 USD hard block where configured.
+- Inbox ingestion (`Leer inbox ahora`) upgraded to:
+  - broader fetch fallback (not only strict `#compra` token)
+  - scored/ranked preview (RFC, amount, token, date proximity)
+  - confidence badges (high/medium/low)
+  - manual selection before import
+- Inbox dedup/processing controls:
+  - same-message dedup guard
+  - same-file-content hash dedup guard
+  - Gmail processed marker after import (`pagos-processed` label + remove `UNREAD`)
+
+Solicitud de factura and email
+- Real send-to-contador re-enabled.
+- Test send remains enabled.
+- Both flows:
+  - attach compra PDF when available
+  - write `EmailOutboxLog`
+  - attach expediente proof (`solicitud_factura`)
+- OAuth scopes updated for inbox processing lifecycle:
+  - `gmail.send`
+  - `gmail.modify`
+- Guardrails documented in `docs/gmail_oauth_guardrails.md`.
+
+RFC receptor policy (fixed)
+- `expected_rfc_receptor` now consistently uses global receptor RFC config (fallback `UAM140522Q51`),
+  not productor/facturador RFC.
+- Existing compras backfilled to match this policy.
+
+Pago and comprobante
+- Payment receipt parser expanded for additional bank receipt layouts.
+- Currency extraction improved (USD/dólares vs MXN/pesos detection).
+- Pago comprobante upload fixed after expediente type refactor.
+
+Expediente/document management (new typing layer)
+- Added explicit `tipo_documento` on `DocumentoCompra` and UI-first selection.
+- Internal `etapa` now auto-derived from `tipo_documento` to keep pipeline gates stable.
+- Added `es_compra_mxn` + `COMPRA_MXN` handling for MXN invoice requests.
+- MXN solicitud send now requires MXN-tagged compra PDF.
+
+Dashboard/UX
+- Dashboard aging/SLA strip added (0-7, 8-15, 16-30, 30+; SLA >15 highlighted).
+- Readiness/compras tables compacted for denser rows.
+- Several flow screens refactored to summary-first behavior with explicit edit paths.
+
+Recent notable commits (main)
+- `f64757b` inbox hardening + microsip/flow UX updates
+- `d396fe7` queue governance + backfill tooling + parser/debt updates
+- `251f9b8` anticipos importer + anticipos flow apply/remove controls
+- `e7cf147` dashboard aging/SLA strip
+- `cacf829` RFC receptor fix + deudas live recalc + microsip totals fixes
+
+Open items (next recommended)
+- Add automated tests for inbox ranking/dedup/processed-label behavior.
+- Optional: sender-profile scoring per productor/facturador for inbox ranking.
+- Optional: explicit UI filter toggle for inbox search window (`unread-only` vs `include read`).
+- Optional: stricter structured categories for "otros pendientes" in deudas.
+
+Overview
+
+This project is an internal business system designed to automate the workflow used to manage cotton purchase payments.
+
+The company purchases cotton bales from producers. Each purchase must go through a series of operational, accounting, and administrative steps before the producer is paid.
+
+Currently this workflow is performed manually using multiple systems:
+
+algodon.net (desktop system used to record cotton purchases)
+
+Excel spreadsheets used to track the payment pipeline
+
+Microsip ERP (Firebird database) used to track producer debts
+
+Gmail for invoice communication with accountants
+
+SAT portal for validating invoices (CFDI)
+
+BBVA NetCash for executing payments
+
+Windows file server for storing digital documents
+
+The goal of this project is to replace the manual Excel pipeline and centralize the entire workflow into a single internal system.
+
+The system should manage the full lifecycle of a cotton purchase from import to final payment and digital expediente completion.
+
+Business Workflow
+
+The current operational workflow is:
+
+Producer sells cotton bales
+→ Purchase recorded in algodon.net
+→ Purchase PDF saved to server
+→ Purchase manually entered into Excel tracking sheet
+→ Debt checked in Microsip
+→ Invoice requested from accountant
+→ Accountant sends invoice (XML + PDF)
+→ Invoice validated against SAT and internal rules
+→ Bank account confirmed with producer
+→ Payment executed in BBVA NetCash
+→ Payment receipt downloaded
+→ Documents saved in server folder
+→ Excel updated
+→ Receipt sent to producer
+
+This entire process must be automated or partially automated.
+
+Key Business Concepts
+Purchase (Compra)
+
+A purchase represents cotton bales bought from a producer.
+
+Each purchase contains information such as:
+
+producer
+
+number of bales
+
+weight in pounds
+
+total value
+
+currency
+
+tax regime
+
+season
+
+Purchases may sometimes be divided into multiple sub-purchases called divisions.
+
+Each division may:
+
+use a different RFC
+
+generate a separate invoice
+
+generate a separate payment
+
+have its own expediente
+
+However divisions may still belong to a parent purchase.
+
+Debt (Deudas)
+
+Before paying a producer, the company subtracts any debts owed by that producer.
+
+Debt is retrieved from Microsip ERP.
+
+Debt rules:
+
+all open balances count as debt
+
+overdue and non-overdue balances count
+
+debts from current season and prior seasons count
+
+debt is deducted from the purchase payment
+
+However, sometimes debt exists outside the ERP system.
+The operator must be able to add manual deductions.
+
+Payment Calculation
+
+The amount paid to the producer is calculated using the following formula:
+
+saldo_a_pagar =
+
+purchase_total
+minus anticipos (advance payments)
+minus microsip debt
+minus RESICO retention (1.25%)
+minus manual deductions
+
+Manual deductions may include:
+
+coberturas
+
+external loans
+
+accounting adjustments
+
+Invoice (Factura)
+
+Before payment can be made, the producer must issue a valid invoice (CFDI).
+
+Invoices are normally generated by the producer’s accountant.
+
+Invoices are typically received by email in the form of:
+
+XML file
+PDF file
+
+Invoice Validation
+
+Invoices must pass validation before payment.
+
+Required checks include:
+
+correct RFC
+
+correct producer name
+
+uso CFDI = adquisición de mercancías
+
+correct payment method
+
+correct currency
+
+IVA rate = 0%
+
+If the producer is in the RESICO regime:
+
+the invoice must include ISR retention 1.25%
+OR
+
+include the legal exemption legend
+
+Invoices that fail validation must block payment.
+
+Bank Confirmation
+
+Before executing payment, the operator must confirm the bank account with the producer.
+
+Even if bank data exists in the system, confirmation is normally requested through WhatsApp.
+
+The system should track:
+
+bank account used
+
+confirmation timestamp
+
+confirmation source
+
+Payment Execution
+
+Payments are executed using BBVA NetCash.
+
+Initially the system will not execute payments automatically.
+
+Instead it will:
+
+prepare payment information
+
+allow operator to perform payment manually
+
+record payment details
+
+store the payment receipt
+
+Payment Priority
+
+Payments are not strictly processed in chronological order.
+
+Priority depends on:
+
+available cash
+
+nearing the 15-day payment promise
+
+producer urgency
+
+manual override by management
+
+The system should compute a priority score for each purchase.
+
+Digital Expediente
+
+Each purchase must maintain a digital expediente containing all documents.
+
+Typical expediente contents:
+
+compra_base.pdf
+compra_division.pdf
+factura.xml
+factura_pdf_proveedor.pdf
+sat_pdf_validado.pdf
+comprobante_pago.pdf
+rep_ppd.pdf
+
+Files should be stored on the company file server.
+
+The system should track file locations in the database.
+
+System Architecture
+
+The recommended architecture is:
+
+Frontend:
+Next.js (React + TypeScript)
+
+Backend:
+FastAPI (Python)
+
+Database:
+PostgreSQL
+
+Background Jobs:
+APScheduler or Celery
+
+File Storage:
+Existing Windows server shared folders
+
+Backend Module Structure
+
+The backend should follow this module structure:
+
+api
+models
+schemas
+services
+integrations
+jobs
+utils
+db
+
+Business logic should reside in services.
+
+API routes should remain thin.
+
+Core System Modules
+Purchase Import Module
+
+Imports purchases exported from algodon.net.
+
+Input:
+
+Excel export file
+
+Actions:
+
+create purchase records
+detect duplicates
+handle divisions
+create expediente folder
+
+Debt Calculation Module
+
+Connects to Microsip Firebird database.
+
+Responsibilities:
+
+retrieve producer debt
+calculate deductions
+store debt snapshot
+allow manual deductions
+
+Invoice Workflow Module
+
+Handles invoice lifecycle.
+
+Responsibilities:
+
+upload XML and PDF
+parse XML
+extract UUID
+validate invoice rules
+store files in expediente
+
+Payment Readiness Queue
+
+Determines which purchases can be paid.
+
+Categories include:
+
+waiting invoice
+blocked
+waiting bank confirmation
+ready to pay
+paid
+
+Payment Registration Module
+
+Records payment execution.
+
+Stores:
+
+payment amount
+currency
+target bank account
+transaction reference
+receipt file
+
+Expediente Manager
+
+Manages all files associated with a purchase.
+
+Responsibilities:
+
+store file paths
+validate required documents
+generate standardized folder structure
+
+Database Entities
+
+The system should implement these main entities.
+
+producers
+producer_bank_accounts
+purchases
+deductions
+debt_snapshots
+invoices
+payments
+expediente_files
+workflow_events
+
+Purchase Workflow States
+
+Purchases should move through the following states:
+
+IMPORTED
+DEBT_CALCULATED
+WAITING_INVOICE
+INVOICE_RECEIVED
+INVOICE_VALID
+INVOICE_BLOCKED
+WAITING_BANK_CONFIRMATION
+READY_TO_PAY
+PAID
+ARCHIVED
+
+State transitions should be logged.
+
+System Integrations
+algodon.net
+
+No API available.
+
+Purchases will be imported from Excel export files.
+
+Microsip ERP
+
+Microsip uses a Firebird database.
+
+The system should query the database to retrieve producer debt balances.
+
+Gmail
+
+Invoices arrive via email.
+
+Future automation may:
+
+scan inbox
+extract attachments
+parse XML
+
+BBVA NetCash
+
+Payments executed manually.
+
+System records payment details and receipts.
+
+Development Strategy
+
+The system should be built incrementally.
+
+Phase 1:
+core purchase module
+purchase import
+dashboard
+
+Phase 2:
+Microsip integration
+debt calculations
+
+Phase 3:
+invoice upload and validation
+
+Phase 4:
+payment readiness queue
+
+Phase 5:
+payment registration
+
+Phase 6:
+email automation
+
+Design Principles
+
+Use explicit workflow states instead of Excel columns.
+
+Keep business logic inside backend services.
+
+Maintain full audit trail of operations.
+
+Store all documents in digital expediente folders.
+
+Build features incrementally to avoid large rewrites.
+
+Payment execution should remain manual initially for safety.
+
+Expected Outcome
+
+The operator should no longer need to manually coordinate multiple systems.
+
+Instead of opening Excel, Microsip, email, SAT, and bank interfaces separately, the operator will see a single dashboard displaying:
+
+purchases waiting invoice
+blocked invoices
+payments ready
+payments completed
+
+The operator will only handle exceptions while the system manages the workflow automatically.

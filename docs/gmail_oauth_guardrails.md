@@ -5,7 +5,7 @@ Owner: pagos-compras ops
 
 ## Required scopes
 - https://www.googleapis.com/auth/gmail.send
-- https://www.googleapis.com/auth/gmail.readonly
+- https://www.googleapis.com/auth/gmail.modify
 
 ## Canonical auth command
 Always use:

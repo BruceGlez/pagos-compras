@@ -12,6 +12,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+import hashlib
 import re
 import xml.etree.ElementTree as ET
 
@@ -58,6 +59,7 @@ from .services import (
     gmail_ready,
     gmail_inbox_ready,
     fetch_gmail_attachments_for_compra,
+    mark_gmail_message_processed,
     import_anticipos_excel,
     import_compras_excel,
     send_gmail,
@@ -109,7 +111,12 @@ def _attach_email_proof_to_expediente(
         f"{body}\n"
     )
 
-    doc = DocumentoCompra(compra=compra, etapa="solicitud_factura", descripcion="Acuse envío solicitud factura")
+    doc = DocumentoCompra(
+        compra=compra,
+        etapa="solicitud_factura",
+        tipo_documento="ACUSE_SOLICITUD",
+        descripcion="Acuse envío solicitud factura",
+    )
     doc.archivo.save(filename, ContentFile(content.encode("utf-8")), save=True)
 
 
@@ -118,8 +125,26 @@ LEGAL_TOKENS = {
 }
 
 
-def _get_compra_pdf_attachment(compra: Compra):
-    doc = compra.documentos.filter(etapa="compra_original", archivo__iendswith=".pdf").order_by("-created_at").first()
+def _get_compra_pdf_attachment(compra: Compra, *, prefer_mxn: bool = False):
+    qs = compra.documentos.filter(etapa="compra_original", archivo__iendswith=".pdf").order_by("-created_at")
+    docs = list(qs[:50])
+    if not docs:
+        return None
+
+    def _is_mxn_doc(d):
+        if bool(getattr(d, "es_compra_mxn", False)) or (getattr(d, "tipo_documento", "") == "COMPRA_MXN"):
+            return True
+        name = ((getattr(d, "archivo", None).name if getattr(d, "archivo", None) else "") or "").lower()
+        desc = (getattr(d, "descripcion", "") or "").lower()
+        txt = f"{name} {desc}"
+        return ("mxn" in txt) or ("peso" in txt) or ("pesos" in txt)
+
+    doc = None
+    if prefer_mxn:
+        doc = next((d for d in docs if _is_mxn_doc(d)), None)
+    if not doc:
+        doc = docs[0]
+
     if not doc or not doc.archivo:
         return None
     try:
@@ -146,11 +171,19 @@ def _extract_xml_basic(xml_bytes: bytes):
     comp = root
     emisor = root.find("cfdi:Emisor", ns)
     tfd = root.find("cfdi:Complemento/tfd:TimbreFiscalDigital", ns)
+    fecha_raw = (comp.attrib.get("Fecha", "") if comp is not None else "").strip()
+    fecha = ""
+    if fecha_raw:
+        try:
+            fecha = datetime.fromisoformat(fecha_raw.replace("Z", "+00:00")).date().isoformat()
+        except Exception:
+            fecha = fecha_raw.split("T")[0] if "T" in fecha_raw else fecha_raw
     return {
         "rfc_emisor": (emisor.attrib.get("Rfc", "") if emisor is not None else "").strip().upper(),
         "nombre_emisor": (emisor.attrib.get("Nombre", "") if emisor is not None else "").strip(),
         "total": (comp.attrib.get("Total", "") if comp is not None else "").strip(),
         "uuid": (tfd.attrib.get("UUID", "") if tfd is not None else "").strip(),
+        "fecha": fecha,
     }
 
 
@@ -1077,7 +1110,16 @@ def compra_flujo_view(request, compra_id):
                 provider = "gmail_oauth" if gmail_ready() else "smtp"
                 provider_msg_id = ""
                 html_body = render_invoice_email_html(body)
-                compra_pdf_att = _get_compra_pdf_attachment(compra)
+                prefer_mxn = (compra.expected_moneda or "").strip().upper() == "MXN"
+                compra_pdf_att = _get_compra_pdf_attachment(compra, prefer_mxn=prefer_mxn)
+                if prefer_mxn:
+                    has_mxn_doc = compra.documentos.filter(
+                        etapa="compra_original",
+                        archivo__iendswith=".pdf",
+                    ).filter(Q(es_compra_mxn=True) | Q(tipo_documento="COMPRA_MXN")).exists()
+                    if not has_mxn_doc:
+                        messages.error(request, "Para solicitud en MXN debes adjuntar un PDF de compra en pesos marcado como MXN.")
+                        return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
                 attachments = [compra_pdf_att] if compra_pdf_att else []
                 if provider == "gmail_oauth":
                     provider_msg_id = send_gmail(to_email, subject, body, html_body=html_body, attachments=attachments)
@@ -1141,39 +1183,79 @@ def compra_flujo_view(request, compra_id):
         elif form_name == "leer_inbox_factura":
             try:
                 if not gmail_inbox_ready():
-                    messages.error(request, "Gmail no tiene permisos de lectura (gmail.readonly). Reautoriza OAuth.")
+                    messages.error(request, "Gmail no tiene permisos de inbox (gmail.modify). Reautoriza OAuth.")
                     return redirect(f"/compras/{compra.id}/flujo/?step=revisar_factura")
 
                 expected_rfc = ((compra.facturador.rfc if compra.facturador_id else "") or compra.productor.rfc or "").strip().upper()
                 expected_total = Decimal(str(compra.compra_en_libras or "0"))
                 total_tolerance = max(Decimal("50"), expected_total * Decimal("0.10"))
-                items = fetch_gmail_attachments_for_compra(compra.numero_compra, max_messages=40)
+                items = fetch_gmail_attachments_for_compra(compra.numero_compra, max_messages=60)
                 by_msg = {}
                 for it in items:
                     by_msg.setdefault(it.get("message_id"), []).append(it)
 
                 preview = []
+                num_tokens = {str(compra.numero_compra), f"{int(compra.numero_compra):05d}"}
                 for msg_id, atts in by_msg.items():
                     xmls = [a for a in atts if str(a.get("filename", "")).lower().endswith(".xml")]
                     pdfs = [a for a in atts if str(a.get("filename", "")).lower().endswith(".pdf")]
                     for x in xmls:
                         meta = _extract_xml_basic(x.get("bytes") or b"")
                         rfc = (meta.get("rfc_emisor") or "").strip().upper()
-                        rfc_ok = bool(expected_rfc and rfc == expected_rfc)
-                        if not rfc_ok:
-                            continue
+                        xml_name = (x.get("filename") or "")
+                        score = 0
+                        reasons = []
+
+                        if expected_rfc and rfc == expected_rfc:
+                            score += 60
+                            reasons.append("RFC✅")
+                        else:
+                            reasons.append("RFC⚠️")
 
                         total_raw = (meta.get("total") or "").strip()
+                        total_xml = None
+                        diff = None
                         try:
                             total_xml = Decimal(total_raw)
+                            diff = abs(total_xml - expected_total)
                         except Exception:
-                            total_xml = None
-                        amount_ok = bool(total_xml is not None and abs(total_xml - expected_total) <= total_tolerance)
-                        if not amount_ok:
+                            pass
+                        if diff is not None:
+                            if diff <= Decimal("3"):
+                                score += 30
+                                reasons.append("Monto✅(±3)")
+                            elif diff <= total_tolerance:
+                                score += 20
+                                reasons.append("Monto~")
+                            elif diff <= (expected_total * Decimal("0.25")):
+                                score += 10
+                                reasons.append("Monto⚠️")
+
+                        name_l = xml_name.lower()
+                        if any(tok in name_l for tok in num_tokens):
+                            score += 10
+                            reasons.append("#Compra")
+
+                        fecha_s = (meta.get("fecha") or "").strip()
+                        if fecha_s and compra.fecha_liq:
+                            try:
+                                fxml = datetime.fromisoformat(fecha_s).date()
+                                d = abs((fxml - compra.fecha_liq).days)
+                                if d <= 7:
+                                    score += 10
+                                    reasons.append("Fecha✅")
+                                elif d <= 30:
+                                    score += 5
+                                    reasons.append("Fecha~")
+                            except Exception:
+                                pass
+
+                        if score < 35:
                             continue
-                        xml_name = x.get("filename")
+
                         base = _norm_attachment_base(xml_name)
                         pdf_match = next((p for p in pdfs if _norm_attachment_base(p.get("filename", "")) == base), None)
+                        confidence = "high" if score >= 80 else ("medium" if score >= 55 else "low")
                         preview.append({
                             "key": f"{msg_id}||{xml_name}",
                             "message_id": msg_id,
@@ -1182,14 +1264,18 @@ def compra_flujo_view(request, compra_id):
                             "rfc_emisor": rfc,
                             "uuid": meta.get("uuid", ""),
                             "total": meta.get("total", ""),
+                            "score": score,
+                            "confidence": confidence,
+                            "match_reason": " · ".join(reasons),
                         })
 
+                preview.sort(key=lambda x: x.get("score", 0), reverse=True)
                 request.session[f"inbox_factura_preview_{compra.id}"] = preview
                 request.session.modified = True
                 if preview:
-                    messages.success(request, f"Inbox leído: {len(preview)} XML candidatos (RFC y monto dentro de tolerancia). Selecciona cuál importar.")
+                    messages.success(request, f"Inbox leído: {len(preview)} XML candidatos (ranking por coincidencia). Selecciona cuál importar.")
                 else:
-                    messages.info(request, "Inbox leído: no se encontraron XML con RFC+monto válidos para esta compra.")
+                    messages.info(request, "Inbox leído: sin candidatos suficientes. Revisa correo/sender o amplía ventana de búsqueda.")
             except Exception as e:
                 messages.error(request, f"Error al leer inbox: {e}")
             return redirect(f"/compras/{compra.id}/flujo/?step=revisar_factura")
@@ -1221,6 +1307,22 @@ def compra_flujo_view(request, compra_id):
                     messages.error(request, "No se encontró el XML seleccionado en inbox (posible cambio de estado).")
                     return redirect(f"/compras/{compra.id}/flujo/?step=revisar_factura")
 
+                msg_id = str(pick.get("message_id") or "")
+                if msg_id and compra.documentos.filter(etapa="factura", descripcion__icontains=f"Inbox Gmail #{msg_id}").exists():
+                    messages.info(request, "Ese correo de inbox ya fue procesado para esta compra.")
+                    return redirect(f"/compras/{compra.id}/flujo/?step=revisar_factura")
+
+                # Hashes actuales para evitar reimportar contenido idéntico (aunque cambie nombre de archivo).
+                existing_hashes = set()
+                for d in compra.documentos.filter(etapa="factura")[:120]:
+                    try:
+                        if d.archivo:
+                            raw = d.archivo.read() or b""
+                            if raw:
+                                existing_hashes.add(hashlib.sha256(raw).hexdigest())
+                    except Exception:
+                        continue
+
                 saved = 0
                 for it in [xml_item, pdf_item]:
                     if not it:
@@ -1229,11 +1331,16 @@ def compra_flujo_view(request, compra_id):
                     data = it.get("bytes") or b""
                     if not filename or not data:
                         continue
+                    h = hashlib.sha256(data).hexdigest()
+                    if h in existing_hashes:
+                        continue
                     exists = compra.documentos.filter(etapa="factura", archivo__iendswith=filename).exists()
                     if exists:
                         continue
-                    doc = DocumentoCompra(compra=compra, etapa="factura", descripcion=f"Inbox Gmail #{it.get('message_id')}")
+                    tipo_doc = "FACTURA_XML" if filename.lower().endswith(".xml") else "FACTURA_PDF"
+                    doc = DocumentoCompra(compra=compra, etapa="factura", tipo_documento=tipo_doc, descripcion=f"Inbox Gmail #{it.get('message_id')}")
                     doc.archivo.save(filename, ContentFile(data), save=True)
+                    existing_hashes.add(h)
                     saved += 1
 
                 cfg = XmlValidationConfig.get_default()
@@ -1263,6 +1370,11 @@ def compra_flujo_view(request, compra_id):
                     compra.uuid_factura = v.uuid or compra.uuid_factura
                     compra.save(update_fields=["uuid_factura", "updated_at"])
 
+                try:
+                    mark_gmail_message_processed(str(pick.get("message_id") or ""), label_name="pagos-processed")
+                except Exception:
+                    pass
+
                 request.session.pop(f"inbox_factura_preview_{compra.id}", None)
                 request.session.modified = True
                 messages.success(request, f"Inbox importado: {saved} adjuntos guardados y XML validado.")
@@ -1286,7 +1398,16 @@ def compra_flujo_view(request, compra_id):
                 provider = "gmail_oauth" if gmail_ready() else "smtp"
                 provider_msg_id = ""
                 html_body = render_invoice_email_html(body)
-                compra_pdf_att = _get_compra_pdf_attachment(compra)
+                prefer_mxn = (compra.expected_moneda or "").strip().upper() == "MXN"
+                compra_pdf_att = _get_compra_pdf_attachment(compra, prefer_mxn=prefer_mxn)
+                if prefer_mxn:
+                    has_mxn_doc = compra.documentos.filter(
+                        etapa="compra_original",
+                        archivo__iendswith=".pdf",
+                    ).filter(Q(es_compra_mxn=True) | Q(tipo_documento="COMPRA_MXN")).exists()
+                    if not has_mxn_doc:
+                        messages.error(request, "Para solicitud TEST en MXN debes adjuntar un PDF de compra en pesos marcado como MXN.")
+                        return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
                 attachments = [compra_pdf_att] if compra_pdf_att else []
                 if provider == "gmail_oauth":
                     provider_msg_id = send_gmail(to_email, subject, body, html_body=html_body, attachments=attachments)
@@ -1806,6 +1927,14 @@ def compra_flujo_view(request, compra_id):
 
     docs_compra_original = list(compra.documentos.filter(etapa="compra_original").order_by("-created_at")[:5])
     has_compra_original_pdf = compra.documentos.filter(etapa="compra_original", archivo__iendswith=".pdf").exists()
+    has_compra_original_mxn_pdf = any(
+        str(getattr(d, "archivo", "")).lower().endswith(".pdf")
+        and (
+            bool(getattr(d, "es_compra_mxn", False))
+            or any(k in (f"{getattr(d, 'archivo', '')} {getattr(d, 'descripcion', '')}".lower()) for k in ["mxn", "peso", "pesos"])
+        )
+        for d in docs_compra_original
+    )
     docs_solicitud = list(compra.documentos.filter(etapa="solicitud_factura").order_by("-created_at")[:5])
     docs_factura = list(compra.documentos.filter(etapa="factura").order_by("-created_at")[:8])
     docs_pago = list(compra.documentos.filter(etapa="pago").order_by("-created_at")[:8])
@@ -1891,6 +2020,7 @@ def compra_flujo_view(request, compra_id):
             "last_microsip_snapshot": last_microsip_snapshot,
             "factura_has_xml": has_xml,
             "factura_has_pdf": has_pdf,
+            "has_compra_original_mxn_pdf": has_compra_original_mxn_pdf,
             "revisar_factura_ready": revisar_factura_ready,
             "facturador_sin_contador": facturador_sin_contador,
             "solicitud_factura_texto": build_invoice_request_message(compra),

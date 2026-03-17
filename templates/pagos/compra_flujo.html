@@ -343,7 +343,7 @@
                             <form method="post" enctype="multipart/form-data" class="mb-2">
                                 {% csrf_token %}
                                 <input type="hidden" name="flow_form" value="documento">
-                                <input type="hidden" name="doc-etapa" value="pago">
+                                <input type="hidden" name="doc-tipo_documento" value="COMPROBANTE_PAGO">
                                 <p>
                                     <label class="form-label" for="id_doc-descripcion">Descripción</label>
                                     <input id="id_doc-descripcion" name="doc-descripcion" class="form-control" value="Comprobante de pago">
@@ -474,6 +474,14 @@
                         {% endif %}
                     </form>
                 </div>
+                {% if solicitud_resumen.expected_moneda == 'MXN' %}
+                <div class="alert alert-warning py-2 small mb-2">
+                    Solicitud configurada en <strong>MXN</strong>. El envío usará el PDF de compra en pesos <strong>marcado como MXN</strong>.
+                    {% if not has_compra_original_mxn_pdf %}
+                    <div class="mt-1"><strong>Falta PDF de compra en MXN.</strong> Súbelo en Expediente con tipo <em>Compra en pesos (PDF)</em>.</div>
+                    {% endif %}
+                </div>
+                {% endif %}
                 <div class="small text-muted mb-2">Si no existe en el catálogo, crea el facturador aquí y queda asignado a esta compra.</div>
                 {% if facturador_sin_contador %}
                 <div class="alert alert-warning py-2">
@@ -531,21 +539,28 @@
                 </div>
                 {% if inbox_factura_preview %}
                 <div class="alert alert-info py-2 mt-2">
-                    <div><strong>Preview inbox (RFC correcto)</strong></div>
+                    <div><strong>Preview inbox (ranking de coincidencia)</strong></div>
                     <form method="post" class="mt-2">
                         {% csrf_token %}
                         <input type="hidden" name="flow_form" value="importar_inbox_factura">
                         <div class="table-responsive">
                             <table class="table table-sm">
-                                <thead><tr><th></th><th>XML</th><th>PDF</th><th>UUID</th><th>Total</th></tr></thead>
+                                <thead><tr><th></th><th>Score</th><th>Conf.</th><th>XML</th><th>PDF</th><th>UUID</th><th>Total</th><th>Match</th></tr></thead>
                                 <tbody>
                                     {% for x in inbox_factura_preview %}
                                     <tr>
                                         <td><input type="radio" name="inbox_pick" value="{{ x.key }}" {% if forloop.first %}checked{% endif %}></td>
+                                        <td><span class="badge text-bg-dark">{{ x.score }}</span></td>
+                                        <td>
+                                            {% if x.confidence == 'high' %}<span class="badge text-bg-success">High</span>
+                                            {% elif x.confidence == 'medium' %}<span class="badge text-bg-warning">Medium</span>
+                                            {% else %}<span class="badge text-bg-secondary">Low</span>{% endif %}
+                                        </td>
                                         <td>{{ x.xml_filename }}</td>
                                         <td>{{ x.pdf_filename|default:'-' }}</td>
                                         <td>{{ x.uuid|default:'-' }}</td>
                                         <td>{{ x.total|default:'-' }}</td>
+                                        <td class="small">{{ x.match_reason|default:'-' }}</td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -711,27 +726,29 @@
                 </div>
                 <div class="small text-muted mb-1">Atajos:</div>
                 <div class="d-flex gap-2 flex-wrap mb-2">
-                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"compra_original","descripcion":"Compra original PDF"}'>Compra original PDF</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"tipo":"COMPRA_USD","descripcion":"Compra original USD"}'>Compra USD</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"tipo":"COMPRA_MXN","descripcion":"Compra original MXN"}'>Compra MXN</button>
                     {% if current_step == "solicitar_factura" %}
-                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"solicitud_factura","descripcion":"Solicitud enviada (correo/whatsapp)"}'>Solicitud enviada</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"tipo":"ACUSE_SOLICITUD","descripcion":"Solicitud enviada (correo/whatsapp)"}'>Solicitud enviada</button>
                     {% elif current_step == "revisar_factura" %}
-                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"factura","descripcion":"Factura XML"}'>Factura XML</button>
-                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"factura","descripcion":"Factura PDF proveedor"}'>Factura PDF</button>
-                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"factura","descripcion":"SAT PDF validado"}'>SAT validado</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"tipo":"FACTURA_XML","descripcion":"Factura XML"}'>Factura XML</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"tipo":"FACTURA_PDF","descripcion":"Factura PDF proveedor"}'>Factura PDF</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"tipo":"SAT_PDF","descripcion":"SAT PDF validado"}'>SAT validado</button>
                     {% elif current_step == "pago" %}
-                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"pago","descripcion":"Comprobante de pago"}'>Comprobante pago</button>
-                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"pago","descripcion":"Carátula bancaria"}'>Carátula bancaria</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"tipo":"COMPROBANTE_PAGO","descripcion":"Comprobante de pago"}'>Comprobante pago</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"tipo":"CARATULA_BANCARIA","descripcion":"Carátula bancaria"}'>Carátula bancaria</button>
                     {% else %}
-                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"etapa":"otro","descripcion":"Documento de soporte"}'>Documento soporte</button>
+                    <button class="btn btn-outline-secondary btn-sm" type="button" data-doc-preset='{"tipo":"OTRO","descripcion":"Documento de soporte"}'>Documento soporte</button>
                     {% endif %}
                 </div>
                 <form method="post" enctype="multipart/form-data" class="mb-2">
                     {% csrf_token %}
                     <input type="hidden" name="flow_form" value="documento">
                     <div class="row g-2 align-items-end">
-                        <div class="col-4">{{ documento_form.etapa.label_tag }}{{ documento_form.etapa }}</div>
-                        <div class="col-8">{{ documento_form.descripcion.label_tag }}{{ documento_form.descripcion }}</div>
+                        <div class="col-5">{{ documento_form.tipo_documento.label_tag }}{{ documento_form.tipo_documento }}</div>
+                        <div class="col-7">{{ documento_form.descripcion.label_tag }}{{ documento_form.descripcion }}</div>
                         <div class="col-8">{{ documento_form.archivo.label_tag }}{{ documento_form.archivo }}</div>
+                        <div class="col-4">{{ documento_form.etapa }}</div>
                         <div class="col-4"><button class="btn btn-outline-primary btn-sm w-100" type="submit">Subir documento</button></div>
                     </div>
                 </form>
@@ -805,14 +822,14 @@
 (() => {
   document.querySelectorAll("[data-doc-preset]").forEach((b) => {
     b.addEventListener("click", () => {
-      const targetEtapa = document.getElementById("id_doc-etapa");
+      const targetTipo = document.getElementById("id_doc-tipo_documento");
       const targetDesc = document.getElementById("id_doc-descripcion");
-      if (!targetEtapa) return;
+      if (!targetTipo) return;
       try {
         const preset = JSON.parse(b.getAttribute("data-doc-preset") || "{}");
-        if (preset.etapa) targetEtapa.value = preset.etapa;
+        if (preset.tipo) targetTipo.value = preset.tipo;
         if (targetDesc && preset.descripcion) targetDesc.value = preset.descripcion;
-        targetEtapa.dispatchEvent(new Event("change", { bubbles: true }));
+        targetTipo.dispatchEvent(new Event("change", { bubbles: true }));
       } catch {}
     });
   });

@@ -14,6 +14,8 @@ from .models import (
     Contador,
     Deduccion,
     DocumentoCompra,
+    DocumentoTipoChoices,
+    DocumentoEtapaChoices,
     PagoCompra,
     PersonaFactura,
     Productor,
@@ -631,7 +633,57 @@ class CompraExpedienteForm(BootstrapFormMixin, forms.ModelForm):
 class DocumentoCompraForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = DocumentoCompra
-        fields = ["etapa", "descripcion", "archivo"]
+        fields = ["tipo_documento", "etapa", "descripcion", "archivo"]
+        labels = {"tipo_documento": "Tipo de documento"}
+        widgets = {"etapa": forms.HiddenInput()}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["etapa"].required = False
+
+    def clean(self):
+        cleaned = super().clean()
+        t = (cleaned.get("tipo_documento") or DocumentoTipoChoices.OTRO).strip().upper()
+        file_obj = cleaned.get("archivo")
+        file_name = (getattr(file_obj, "name", "") or "").lower()
+
+        etapa = DocumentoEtapaChoices.OTRO
+        es_compra_mxn = False
+        if t == DocumentoTipoChoices.COMPRA_USD:
+            etapa = DocumentoEtapaChoices.COMPRA_ORIGINAL
+        elif t == DocumentoTipoChoices.COMPRA_MXN:
+            etapa = DocumentoEtapaChoices.COMPRA_ORIGINAL
+            es_compra_mxn = True
+        elif t in {DocumentoTipoChoices.FACTURA_XML, DocumentoTipoChoices.FACTURA_PDF, DocumentoTipoChoices.SAT_PDF}:
+            etapa = DocumentoEtapaChoices.FACTURA
+        elif t in {DocumentoTipoChoices.CARATULA_BANCARIA, DocumentoTipoChoices.COMPROBANTE_PAGO}:
+            etapa = DocumentoEtapaChoices.PAGO
+        elif t == DocumentoTipoChoices.ACUSE_SOLICITUD:
+            etapa = DocumentoEtapaChoices.SOLICITUD_FACTURA
+
+        if file_name:
+            if t == DocumentoTipoChoices.FACTURA_XML and not file_name.endswith(".xml"):
+                self.add_error("archivo", "Para 'Factura XML' el archivo debe ser .xml")
+            if t in {
+                DocumentoTipoChoices.COMPRA_USD,
+                DocumentoTipoChoices.COMPRA_MXN,
+                DocumentoTipoChoices.FACTURA_PDF,
+                DocumentoTipoChoices.SAT_PDF,
+                DocumentoTipoChoices.CARATULA_BANCARIA,
+                DocumentoTipoChoices.COMPROBANTE_PAGO,
+            } and not file_name.endswith(".pdf"):
+                self.add_error("archivo", "Para este tipo de documento el archivo debe ser .pdf")
+
+        cleaned["etapa"] = etapa
+        cleaned["es_compra_mxn"] = es_compra_mxn
+        return cleaned
+
+    def save(self, commit=True):
+        obj = super().save(commit=False)
+        obj.es_compra_mxn = bool(self.cleaned_data.get("es_compra_mxn"))
+        if commit:
+            obj.save()
+        return obj
 
 
 class DeduccionForm(BootstrapFormMixin, forms.ModelForm):
