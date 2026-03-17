@@ -354,9 +354,8 @@ class CompraFlujo2Form(BootstrapFormMixin, forms.ModelForm):
 class CompraFlujoAnticiposForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Compra
-        fields = ["anticipo", "anticipos_revisados"]
+        fields = ["anticipos_revisados"]
         labels = {
-            "anticipo": "Anticipo aplicado en compra",
             "anticipos_revisados": "Anticipos revisados",
         }
 

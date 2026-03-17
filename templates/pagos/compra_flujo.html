@@ -459,7 +459,11 @@
                 <hr>
                 <h6>Solicitud de factura</h6>
                 <div class="d-flex gap-2 mb-2 flex-wrap">
-                    <button class="btn btn-outline-secondary btn-sm" type="button" disabled title="Deshabilitado temporalmente para evitar envío a contador">Enviar solicitud (contador) deshabilitado</button>
+                    <form method="post" class="mb-0">
+                        {% csrf_token %}
+                        <input type="hidden" name="flow_form" value="enviar_solicitud_email">
+                        <button class="btn btn-outline-primary btn-sm" type="submit" {% if not compra.correo and not compra.productor.contador.email %}disabled title="Falta correo de contador"{% endif %}>Enviar solicitud al contador</button>
+                    </form>
                     <form method="post" class="mb-0">
                         {% csrf_token %}
                         <input type="hidden" name="flow_form" value="enviar_solicitud_email_test">
@@ -1064,6 +1068,34 @@
   } else {
     applyLocks();
   }
+})();
+</script>
+{% endif %}
+
+{% if current_step == "deudas" %}
+<script>
+(() => {
+  const usdInput = document.querySelector('input[name$="retencion_deudas_usd"]');
+  const mxnInput = document.querySelector('input[name$="retencion_deudas_mxn"]');
+  const totalInput = document.querySelector('input[name$="total_deuda_en_dls"]');
+  const tc = Number("{{ compra.tipo_cambio_valor|default:0 }}") || 0;
+  if (!usdInput || !mxnInput || !totalInput) return;
+
+  const num = (v) => {
+    const x = Number(String(v || "").replace(/,/g, ""));
+    return Number.isFinite(x) ? x : 0;
+  };
+
+  const recalc = () => {
+    const usd = num(usdInput.value);
+    const mxn = num(mxnInput.value);
+    const total = tc > 0 ? (usd + (mxn / tc)) : usd;
+    totalInput.value = total.toFixed(4);
+  };
+
+  usdInput.addEventListener("input", recalc);
+  mxnInput.addEventListener("input", recalc);
+  recalc();
 })();
 </script>
 {% endif %}

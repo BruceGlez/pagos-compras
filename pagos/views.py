@@ -1066,7 +1066,77 @@ def compra_flujo_view(request, compra_id):
                 return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
             messages.error(request, "No se pudo crear el facturador. Revisa los datos.")
         elif form_name == "enviar_solicitud_email":
-            messages.warning(request, "Envío real a contador deshabilitado temporalmente. Usa el botón de envío TEST.")
+            to_email = (compra.correo or (compra.productor.contador.email if compra.productor.contador else "") or "").strip()
+            if not to_email:
+                messages.error(request, "No hay correo de contador configurado para esta compra.")
+                return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
+            payload = build_invoice_request_email(compra)
+            subject = payload["subject"]
+            body = payload["body"]
+            try:
+                provider = "gmail_oauth" if gmail_ready() else "smtp"
+                provider_msg_id = ""
+                html_body = render_invoice_email_html(body)
+                compra_pdf_att = _get_compra_pdf_attachment(compra)
+                attachments = [compra_pdf_att] if compra_pdf_att else []
+                if provider == "gmail_oauth":
+                    provider_msg_id = send_gmail(to_email, subject, body, html_body=html_body, attachments=attachments)
+                else:
+                    msg = EmailMultiAlternatives(subject, body, settings.DEFAULT_FROM_EMAIL, [to_email])
+                    if html_body:
+                        msg.attach_alternative(html_body, "text/html")
+                    for att in attachments:
+                        if att:
+                            msg.attach(att[0], att[1], att[2])
+                    msg.send(fail_silently=False)
+
+                EmailOutboxLog.objects.create(
+                    compra=compra,
+                    to_email=to_email,
+                    subject=subject,
+                    body=body,
+                    template_code=payload.get("template_code", ""),
+                    provider=provider,
+                    status="SENT",
+                    error=(provider_msg_id or ""),
+                )
+
+                _attach_email_proof_to_expediente(
+                    compra,
+                    to_email=to_email,
+                    subject=subject,
+                    body=body,
+                    provider=provider,
+                    provider_msg_id=provider_msg_id,
+                    template_code=payload.get("template_code", ""),
+                )
+
+                compra.solicitud_factura_enviada = True
+                compra.fecha_solicitud_factura = timezone.localdate()
+                compra.save(update_fields=["solicitud_factura_enviada", "fecha_solicitud_factura", "updated_at"])
+                actor = str(getattr(request.user, "username", "operador") or "operador")
+                try:
+                    transition_compra(
+                        compra,
+                        WorkflowStateChoices.WAITING_INVOICE,
+                        actor=actor,
+                        reason="Solicitud de factura enviada a contador",
+                    )
+                except ValueError:
+                    pass
+                messages.success(request, f"Solicitud enviada a contador: {to_email} ({provider}).")
+            except Exception as e:
+                EmailOutboxLog.objects.create(
+                    compra=compra,
+                    to_email=to_email,
+                    subject=subject,
+                    body=body,
+                    template_code=payload.get("template_code", ""),
+                    provider="gmail_oauth" if gmail_ready() else "smtp",
+                    status="ERROR",
+                    error=str(e),
+                )
+                messages.error(request, f"No se pudo enviar correo a contador: {e}")
             return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
         elif form_name == "leer_inbox_factura":
             try:
@@ -1565,9 +1635,11 @@ def compra_flujo_view(request, compra_id):
                 compra.refresh_from_db()
                 if form_name == "solicitar_factura":
                     source = (forms[form_name].cleaned_data.get("factura_source") or "productor").strip()
+                    cfg_xml = XmlValidationConfig.get_default()
+                    global_rfc_receptor = ((cfg_xml.global_rfc_receptor or "").strip().upper() or "UAM140522Q51")
                     if source == "facturador" and compra.facturador:
                         compra.factura = compra.facturador.nombre
-                        compra.expected_rfc_receptor = (compra.facturador.rfc or "").strip().upper()
+                        compra.expected_rfc_receptor = global_rfc_receptor
                         linked_contador = compra.facturador.contador
                         if linked_contador:
                             compra.contador = linked_contador.nombre
@@ -1579,7 +1651,7 @@ def compra_flujo_view(request, compra_id):
                     else:
                         compra.facturador = None
                         compra.factura = compra.productor.nombre
-                        compra.expected_rfc_receptor = (compra.productor.rfc or "").strip().upper()
+                        compra.expected_rfc_receptor = global_rfc_receptor
                         if compra.productor.contador:
                             compra.contador = compra.productor.contador.nombre
                             compra.correo = compra.productor.contador.email
@@ -1715,8 +1787,7 @@ def compra_flujo_view(request, compra_id):
         "expected_uso_cfdi": (compra.expected_uso_cfdi or "G01").strip(),
         "expected_rfc_receptor": (
             compra.expected_rfc_receptor
-            or (compra.facturador.rfc if compra.facturador_id else compra.productor.rfc)
-            or ""
+            or ((XmlValidationConfig.get_default().global_rfc_receptor or "").strip().upper() or "UAM140522Q51")
         ).strip().upper(),
     }
     has_xml = any(str(x).lower().endswith(".xml") for x in factura_docs)

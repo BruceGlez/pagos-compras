@@ -208,11 +208,15 @@ def list_microsip_clients_by_rfc(rfc: str, limit: int = 40):
     """
     rows = _fetch(sql)
 
+    # Totales reales de deuda/remisión por cliente base (para no mostrar 0 falso en candidatos RFC).
+    totals_by_base = {c["cliente"]: c for c in _aggregate_clients(_rows_all_cached())}
+
     # Unificar IDs (1/2) bajo el mismo cliente base para mapear ambos al productor.
     by_base = {}
     for x in rows:
         raw_name = (x.get("CLIENTE") or "").strip()
         base = _client_base(raw_name)
+        agg = totals_by_base.get(base) or {}
         obj = by_base.setdefault(
             base,
             {
@@ -220,8 +224,8 @@ def list_microsip_clients_by_rfc(rfc: str, limit: int = 40):
                 "cliente_ids": set(),
                 "aliases": set(),
                 "rfc": (x.get("RFC") or "").strip().upper(),
-                "usd": Decimal("0"),
-                "mxn": Decimal("0"),
+                "usd": Decimal(str(agg.get("usd") or 0)),
+                "mxn": Decimal(str(agg.get("mxn") or 0)),
             },
         )
         cid = str(x.get("CLIENTE_ID") or "").strip()

@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal, ROUND_HALF_UP
 
 from pagos.catalogs import SAT_FORMAS_PAGO, SAT_METODOS_PAGO, SAT_USOS_CFDI
-from pagos.models import EmailTemplate
+from pagos.models import EmailTemplate, XmlValidationConfig
 
 
 def _label(code: str, options):
@@ -15,10 +15,10 @@ def _ctx(compra):
     productor = compra.productor
     facturador = compra.facturador
     nombre_factura = facturador.nombre if facturador else (compra.factura or productor.nombre)
+    cfg = XmlValidationConfig.get_default()
     rfc_factura = (
         (compra.expected_rfc_receptor or "").strip().upper()
-        or ((facturador.rfc if facturador else "") or "").strip().upper()
-        or (productor.rfc or "").strip().upper()
+        or ((cfg.global_rfc_receptor or "").strip().upper() or "UAM140522Q51")
     )
     subtotal = Decimal(str(compra.compra_en_libras or 0))
     ret_125 = (subtotal * Decimal("0.0125")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
