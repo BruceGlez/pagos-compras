@@ -102,6 +102,16 @@ def _find_header_row(rows: list[tuple]) -> int:
     return 0
 
 
+def _find_header_row_anticipos(rows: list[tuple]) -> int:
+    for i, row in enumerate(rows[:40]):
+        cols = {_norm_col(str(c)) for c in row if str(c).strip()}
+        has_productor = "PRODUCTOR" in cols
+        has_anticipo_hint = any(c in cols for c in {"ANTICIPO", "MONTO", "MONTO ANTICIPO", "NO ANTICIPO", "NUMERO ANTICIPO"})
+        if has_productor and has_anticipo_hint:
+            return i
+    return 0
+
+
 def _build_parsed_records(path: str | Path):
     rows = _read_rows(path)
     if not rows:
@@ -426,12 +436,12 @@ def preview_anticipos_excel(path: str | Path, *, limit: int = 20):
     rows = _read_rows(path)
     if not rows:
         return []
-    h = _find_header_row(rows)
+    h = _find_header_row_anticipos(rows)
     headers = [_norm_col(str(c or "")) for c in rows[h]]
     idx = {h: i for i, h in enumerate(headers)}
 
     aliases = {
-        "ANTICIPO_NUM": ["ANTICIPO", "NO ANTICIPO", "NUMERO ANTICIPO"],
+        "ANTICIPO_NUM": ["NO ANTICIPO", "NUMERO ANTICIPO", "NUM ANTICIPO"],
         "FECHA": ["FECHA DE PAGO", "FECHA"],
         "PRODUCTOR": ["PRODUCTOR"],
         "PERSONA": ["PERSONA QUE FACTURA"],
@@ -476,12 +486,12 @@ def import_anticipos_excel(path: str | Path, *, dry_run: bool = False) -> Import
     rows = _read_rows(path)
     if not rows:
         return ImportStats()
-    h = _find_header_row(rows)
+    h = _find_header_row_anticipos(rows)
     headers = [_norm_col(str(c or "")) for c in rows[h]]
     idx = {h: i for i, h in enumerate(headers)}
 
     aliases = {
-        "ANTICIPO_NUM": ["ANTICIPO", "NO ANTICIPO", "NUMERO ANTICIPO"],
+        "ANTICIPO_NUM": ["NO ANTICIPO", "NUMERO ANTICIPO", "NUM ANTICIPO"],
         "FECHA": ["FECHA DE PAGO", "FECHA"],
         "PRODUCTOR": ["PRODUCTOR"],
         "PERSONA": ["PERSONA QUE FACTURA"],
@@ -517,10 +527,48 @@ def import_anticipos_excel(path: str | Path, *, dry_run: bool = False) -> Import
             existing = None
             if numero > 0:
                 existing = Anticipo.objects.filter(numero_anticipo=numero).first()
+            else:
+                factura_txt = str(val(row, "FACTURA", "") or "").strip()
+                uuid_nc_txt = str(val(row, "UUID_NC", "") or "").strip()
+                q = Anticipo.objects.filter(
+                    productor=productor,
+                    fecha_pago=fecha_pago,
+                    monto_anticipo=monto,
+                )
+                if factura_txt:
+                    q = q.filter(factura=factura_txt)
+                if uuid_nc_txt:
+                    q = q.filter(uuid_nota_credito=uuid_nc_txt)
+                existing = q.first()
 
             if existing:
-                stats.duplicates += 1
-                ImportRowLog.objects.create(run=run, row_number=rn, status="duplicate", message="Anticipo ya existe", compra_numero=numero, productor_nombre=productor_nombre)
+                changed = False
+                persona_txt_existing = str(val(row, "PERSONA", "") or "").strip()
+                persona_obj_existing = _resolve_or_create_persona(persona_txt_existing)
+                factura_new = str(val(row, "FACTURA", "") or "").strip()
+                uuid_new = str(val(row, "UUID_NC", "") or "").strip()
+
+                for field, new_val in [
+                    ("fecha_pago", fecha_pago),
+                    ("productor", productor),
+                    ("persona_facturadora", persona_obj_existing),
+                    ("persona_que_factura", persona_txt_existing),
+                    ("factura", factura_new),
+                    ("uuid_nota_credito", uuid_new),
+                    ("monto_anticipo", monto),
+                    ("moneda", moneda),
+                ]:
+                    if getattr(existing, field) != new_val:
+                        setattr(existing, field, new_val)
+                        changed = True
+
+                if changed and not dry_run:
+                    existing.save()
+                    stats.updated += 1
+                    ImportRowLog.objects.create(run=run, row_number=rn, status="updated", message="Anticipo existente actualizado", compra_numero=existing.numero_anticipo, productor_nombre=productor_nombre)
+                else:
+                    stats.duplicates += 1
+                    ImportRowLog.objects.create(run=run, row_number=rn, status="duplicate", message="Anticipo ya existe", compra_numero=existing.numero_anticipo, productor_nombre=productor_nombre)
                 continue
 
             persona_txt = str(val(row, "PERSONA", "") or "").strip()

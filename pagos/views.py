@@ -48,7 +48,7 @@ from .forms import (
     TipoCambioForm,
     XmlValidationConfigForm,
 )
-from .models import Anticipo, BeneficiaryValidationException, Compra, Contador, Deduccion, DocumentoCompra, EmailOutboxLog, EmailTemplate, FacturadorCuentaBancaria, ImportRun, PagoCompra, PersonaFactura, Productor, ProductorCuentaBancaria, TipoCambio, WorkflowStateChoices, XmlValidationConfig
+from .models import Anticipo, AplicacionAnticipo, BeneficiaryValidationException, Compra, Contador, Deduccion, DocumentoCompra, EmailOutboxLog, EmailTemplate, FacturadorCuentaBancaria, ImportRun, PagoCompra, PersonaFactura, Productor, ProductorCuentaBancaria, TipoCambio, WorkflowStateChoices, XmlValidationConfig
 from .services import (
     build_invoice_request_email,
     build_invoice_request_message,
@@ -1504,6 +1504,39 @@ def compra_flujo_view(request, compra_id):
                 messages.success(request, "Division creada correctamente.")
                 return redirect(f"/compras/{compra.id}/flujo/?step=dividir")
             messages.error(request, "Error al crear division.")
+        elif form_name == "anticipo_aplicar":
+            anticipo_id = (request.POST.get("anticipo_id") or "").strip()
+            monto_raw = (request.POST.get("monto_aplicar") or "").strip()
+            try:
+                monto = Decimal(monto_raw or "0")
+            except Exception:
+                monto = Decimal("0")
+            anticipo = Anticipo.objects.filter(id=anticipo_id, productor=compra.productor).first() if anticipo_id.isdigit() else None
+            if not anticipo:
+                messages.error(request, "Anticipo no encontrado para este productor.")
+                return redirect(f"/compras/{compra.id}/flujo/?step=anticipos")
+            if monto <= 0:
+                monto = min(anticipo.saldo_disponible, compra.saldo_por_pagar)
+            try:
+                AplicacionAnticipo.objects.create(
+                    anticipo=anticipo,
+                    compra=compra,
+                    fecha=timezone.localdate(),
+                    monto_aplicado=monto,
+                )
+                messages.success(request, f"Anticipo #{anticipo.numero_anticipo} aplicado por {monto}.")
+            except Exception as e:
+                messages.error(request, f"No se pudo aplicar anticipo: {e}")
+            return redirect(f"/compras/{compra.id}/flujo/?step=anticipos")
+        elif form_name == "anticipo_quitar":
+            app_id = (request.POST.get("app_id") or "").strip()
+            app = compra.aplicaciones_anticipo.filter(id=app_id).first() if app_id.isdigit() else None
+            if not app:
+                messages.error(request, "Aplicación de anticipo no encontrada.")
+                return redirect(f"/compras/{compra.id}/flujo/?step=anticipos")
+            app.delete()
+            messages.success(request, "Aplicación de anticipo eliminada.")
+            return redirect(f"/compras/{compra.id}/flujo/?step=anticipos")
         elif form_name in form_map:
             if form_name == "deudas" and not (compra.productor.rfc or "").strip():
                 messages.error(request, "Completa RFC del productor para continuar en Revisar deudas.")
@@ -1765,6 +1798,7 @@ def compra_flujo_view(request, compra_id):
             "anticipos_pendientes": compra.productor.anticipos.filter(
                 pendiente_aplicar="PENDIENTE"
             ).order_by("-fecha_pago")[:20],
+            "anticipos_aplicados": compra.aplicaciones_anticipo.select_related("anticipo").order_by("-fecha", "-id")[:20],
             "ultima_validacion_factura": compra.invoice_validations.first(),
             "expediente_status": expediente_status,
             "last_microsip_snapshot": last_microsip_snapshot,

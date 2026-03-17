@@ -156,6 +156,65 @@
                             <p>{{ active_form.expected_rfc_receptor.label_tag }} {{ active_form.expected_rfc_receptor }}</p>
                             <p>{{ active_form.contador.label_tag }} {{ active_form.contador }}</p>
                             <p>{{ active_form.correo.label_tag }} {{ active_form.correo }}</p>
+                        {% elif current_step == "anticipos" %}
+                            <div class="alert alert-light py-2 small">
+                                <div><strong>Aplicar anticipos del productor</strong></div>
+                                <div>Total aplicado actual: <strong>{{ compra.total_aplicado_anticipos|money }}</strong></div>
+                            </div>
+                            {% if anticipos_pendientes %}
+                            <div class="table-responsive mb-2">
+                                <table class="table table-sm">
+                                    <thead><tr><th>Anticipo</th><th>Fecha</th><th>Saldo disp.</th><th>Aplicar</th></tr></thead>
+                                    <tbody>
+                                    {% for a in anticipos_pendientes %}
+                                        <tr>
+                                            <td>#{{ a.numero_anticipo }}</td>
+                                            <td>{{ a.fecha_pago }}</td>
+                                            <td>{{ a.saldo_disponible|money }}</td>
+                                            <td>
+                                                <form method="post" class="d-flex gap-1">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="flow_form" value="anticipo_aplicar">
+                                                    <input type="hidden" name="anticipo_id" value="{{ a.id }}">
+                                                    <input class="form-control form-control-sm" type="number" step="0.0001" name="monto_aplicar" placeholder="auto">
+                                                    <button class="btn btn-outline-primary btn-sm" type="submit">Aplicar</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="small text-muted mb-2">No hay anticipos pendientes para este productor.</div>
+                            {% endif %}
+
+                            {% if anticipos_aplicados %}
+                            <div class="small fw-semibold mb-1">Aplicaciones en esta compra</div>
+                            <div class="table-responsive mb-2">
+                                <table class="table table-sm">
+                                    <thead><tr><th>Fecha</th><th>Anticipo</th><th>Monto</th><th></th></tr></thead>
+                                    <tbody>
+                                    {% for ap in anticipos_aplicados %}
+                                        <tr>
+                                            <td>{{ ap.fecha }}</td>
+                                            <td>#{{ ap.anticipo.numero_anticipo }}</td>
+                                            <td>{{ ap.monto_aplicado|money }}</td>
+                                            <td>
+                                                <form method="post">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="flow_form" value="anticipo_quitar">
+                                                    <input type="hidden" name="app_id" value="{{ ap.id }}">
+                                                    <button class="btn btn-outline-danger btn-sm" type="submit">Quitar</button>
+                                                </form>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% endif %}
+                            <p>{{ active_form.anticipos_revisados.label_tag }} {{ active_form.anticipos_revisados }}</p>
                         {% else %}
                             {{ active_form.as_p }}
                         {% endif %}
