@@ -105,6 +105,98 @@ Open items (next recommended)
 - Optional: explicit UI filter toggle for inbox search window (`unread-only` vs `include read`).
 - Optional: stricter structured categories for "otros pendientes" in deudas.
 
+CODEBASE ANALYSIS SNAPSHOT (2026-03-17)
+
+Validated directly from repository
+- Stack/runtime:
+  - Django monolith (`pagos/` app), server-side templates, SQLite in current runtime, PostgreSQL configurable.
+  - Service mode in operations: user systemd (`pagos-compras.service`).
+- Domain coverage present in models/services:
+  - Workflow states + `WorkflowEvent` audit log.
+  - Debt snapshot + manual deductions.
+  - XML validation result history.
+  - Gmail send + inbox processing (ranking, dedup, processed labeling).
+  - Microsip mapping/sync integration seams.
+  - Document typing (`tipo_documento`) with etapa derivation.
+- API surface currently available:
+  - `api/queue/summary/`
+  - `api/compras/<id>/`
+  - `api/facturadores/<id>/contacto/`
+- Automated tests status:
+  - `manage.py test` discovers 9 tests.
+  - Current failing test: `test_division_sigue_mismo_flujo_que_compra_base`
+    - Expected `flujo_codigo="anticipos"`, actual `"captura"`.
+
+Spec drift (explicit)
+- Original architecture section still describes Next.js + FastAPI as recommendation.
+- Accepted/implemented architecture is Django modular monolith (ADR-001).
+- This is a governance/documentation drift and should be treated as intentional product direction update.
+
+Detailed missing work (prioritized)
+
+P0 — Correctness / operational risk
+1) Fix failing workflow regression test for divisiones
+   - Align business rule: define whether division inherits parent flow step or starts at `captura`.
+   - Update code + test to one single canonical behavior.
+   - Add migration/backfill if persisted data requires normalization.
+
+2) Expand high-risk test coverage (critical flows)
+   - Inbox import ranking selection and confidence scoring outcomes.
+   - Dedup behavior by message-id and by content hash.
+   - Gmail processed marker (`pagos-processed` label + `UNREAD` removal).
+   - Queue gate blockers (invoice/bank/docs/caratula) and `mark_ready` enforcement.
+   - RESICO validation matrix (RETENCION_125 / EXENCION_LEYENDA / AUTO).
+
+3) Storage policy hardening for expediente
+   - Confirm/standardize production canonical storage (Windows file server vs local media).
+   - Add health checks for unreachable storage paths.
+   - Add operator-visible error states and retry-safe behavior for upload/attach actions.
+
+P1 — Consistency / maintainability
+4) Align architecture/spec docs with reality
+   - Keep historical target as "future option", but mark Django modular monolith as active production baseline.
+   - Add explicit migration criteria for any future split (load, team boundaries, API stability).
+
+5) Formalize workflow/state machine invariants
+   - Define state preconditions and forbidden transitions in a single service contract.
+   - Enforce consistently across UI actions, imports, and management commands.
+   - Add reconciliation report command (not just backfill apply) for audit-friendly drift detection.
+
+6) Inbox governance improvements
+   - Add configurable search window mode (`unread-only` vs include-read).
+   - Add optional sender-profile scoring by productor/facturador.
+   - Add explainability in UI: why top candidate was ranked first.
+
+7) Payment controls and reconciliation
+   - Add explicit net payment breakdown snapshot at payment commit time:
+     - purchase total
+     - anticipos
+     - Microsip debt
+     - retentions
+     - manual deductions
+   - Add reconciliation checks for currency conversion source (tipo cambio pactado vs catalog tc).
+
+P2 — UX/ops improvements
+8) Structured deductions taxonomy
+   - Replace freeform "otros pendientes" with typed categories and optional subcategories.
+   - Add reporting by category for finance review.
+
+9) Observability and supportability
+   - Add structured logs for each workflow action (actor, compra, transition, result).
+   - Add lightweight operational metrics (counts by blocker, inbox processing outcomes, validation fail reasons).
+   - Add admin troubleshooting panel for recent inbox imports and dedup decisions.
+
+10) API expansion for future frontend decoupling
+   - Queue list with pagination/filter/sort.
+   - Compra timeline endpoint (workflow + communications + docs).
+   - Validation diagnostics endpoint (field-level pass/fail details).
+
+Acceptance criteria for the next execution cycle
+- Test suite green in CI/local (`manage.py test`) with coverage added for inbox + queue + RESICO.
+- One-source-of-truth state machine rules documented and enforced.
+- Architecture section updated to remove ambiguity about current production stack.
+- Clear operator-facing error handling for storage/gmail processing failures.
+
 Overview
 
 This project is an internal business system designed to automate the workflow used to manage cotton purchase payments.

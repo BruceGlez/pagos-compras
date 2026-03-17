@@ -55,6 +55,13 @@ Updated: 2026-03-17
   - `python manage.py backfill_workflow_states --apply`
 
 ## Immediate Watchlist
-- Add automated tests for inbox ranking + dedup + Gmail processed marker.
+- ✅ Division flow rule aligned + test fixed:
+  - divisiones inician independientes en `captura` y quedan ligadas por `parent_compra`.
+- ✅ Added baseline tests for:
+  - queue `mark_ready` blocked/success paths,
+  - inbox dedup guards (message-id and content-level no-duplicate insert),
+  - RESICO policy matrix core cases.
+- Remaining: expand inbox ranking confidence test matrix + processed-marker edge/error cases.
+- Confirm canonical expediente storage policy and error handling when storage is unavailable.
 - Optional sender-profile scoring for better inbox ranking confidence.
 - Optional structured categories for "otros pendientes" in deudas.
