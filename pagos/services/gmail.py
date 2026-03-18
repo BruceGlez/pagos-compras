@@ -8,48 +8,71 @@ from pathlib import Path
 from django.conf import settings
 
 
-def _load_creds(scopes=None):
+SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
+MODIFY_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
+
+
+def _token_path(*, inbox: bool) -> Path:
+    if inbox:
+        return Path(getattr(settings, "GMAIL_OAUTH_INBOX_TOKEN_FILE", settings.GMAIL_OAUTH_TOKEN_FILE))
+    return Path(settings.GMAIL_OAUTH_TOKEN_FILE)
+
+
+def _load_creds(scopes=None, *, inbox: bool = False):
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
 
-    scopes = scopes or ["https://www.googleapis.com/auth/gmail.send"]
-    token_file = Path(settings.GMAIL_OAUTH_TOKEN_FILE)
+    scopes = scopes or [SEND_SCOPE]
+
+    # Primary token (separate inbox token when inbox=True)
+    token_candidates = [_token_path(inbox=inbox)]
+
+    # Backward-compat fallback: if inbox token missing, allow legacy shared token.
+    if inbox:
+        legacy = _token_path(inbox=False)
+        if legacy not in token_candidates:
+            token_candidates.append(legacy)
+
+    selected_file = None
     creds = None
 
-    if token_file.exists():
+    for token_file in token_candidates:
+        if not token_file.exists():
+            continue
+
         try:
             payload = json.loads(token_file.read_text())
             token_scopes = set(payload.get("scopes") or [])
             if token_scopes and not set(scopes).issubset(token_scopes):
-                return None
+                continue
         except Exception:
-            pass
+            continue
 
         try:
             creds = Credentials.from_authorized_user_file(str(token_file), scopes)
+            selected_file = token_file
+            break
         except Exception:
-            return None
+            continue
 
     if creds and creds.expired and creds.refresh_token:
         try:
             creds.refresh(Request())
-            token_file.write_text(creds.to_json())
+            if selected_file:
+                selected_file.write_text(creds.to_json())
         except Exception:
             return None
+
     return creds
 
 
 def gmail_ready() -> bool:
-    creds = _load_creds(["https://www.googleapis.com/auth/gmail.send"])
+    creds = _load_creds([SEND_SCOPE], inbox=False)
     return bool(creds and creds.valid)
 
 
 def gmail_inbox_ready() -> bool:
-    scopes = [
-        "https://www.googleapis.com/auth/gmail.modify",
-        "https://www.googleapis.com/auth/gmail.send",
-    ]
-    creds = _load_creds(scopes)
+    creds = _load_creds([MODIFY_SCOPE, SEND_SCOPE], inbox=True)
     return bool(creds and creds.valid)
 
 
@@ -62,7 +85,7 @@ def send_gmail(
 ) -> str:
     from googleapiclient.discovery import build
 
-    creds = _load_creds()
+    creds = _load_creds([SEND_SCOPE], inbox=False)
     if not creds or not creds.valid:
         raise RuntimeError("Gmail OAuth no configurado. Ejecuta autorizar_gmail_oauth.")
 
@@ -91,13 +114,13 @@ def send_gmail(
 def fetch_gmail_attachments_for_compra(compra_numero: int, max_messages: int = 20):
     from googleapiclient.discovery import build
 
-    scopes = [
-        "https://www.googleapis.com/auth/gmail.modify",
-        "https://www.googleapis.com/auth/gmail.send",
-    ]
-    creds = _load_creds(scopes)
+    scopes = [MODIFY_SCOPE, SEND_SCOPE]
+    creds = _load_creds(scopes, inbox=True)
     if not creds or not creds.valid:
-        raise RuntimeError("Gmail OAuth sin scopes requeridos (gmail.send + gmail.modify). Ejecuta: python manage.py autorizar_gmail_oauth")
+        raise RuntimeError(
+            "Gmail inbox OAuth sin scopes requeridos (gmail.send + gmail.modify). "
+            "Ejecuta: python manage.py autorizar_gmail_oauth"
+        )
 
     service = build("gmail", "v1", credentials=creds)
     n = int(compra_numero)
@@ -136,13 +159,13 @@ def fetch_gmail_attachments_for_compra(compra_numero: int, max_messages: int = 2
 def mark_gmail_message_processed(message_id: str, label_name: str = "pagos-processed"):
     from googleapiclient.discovery import build
 
-    scopes = [
-        "https://www.googleapis.com/auth/gmail.modify",
-        "https://www.googleapis.com/auth/gmail.send",
-    ]
-    creds = _load_creds(scopes)
+    scopes = [MODIFY_SCOPE, SEND_SCOPE]
+    creds = _load_creds(scopes, inbox=True)
     if not creds or not creds.valid:
-        raise RuntimeError("Gmail OAuth sin scopes requeridos (gmail.send + gmail.modify). Ejecuta: python manage.py autorizar_gmail_oauth")
+        raise RuntimeError(
+            "Gmail inbox OAuth sin scopes requeridos (gmail.send + gmail.modify). "
+            "Ejecuta: python manage.py autorizar_gmail_oauth"
+        )
 
     service = build("gmail", "v1", credentials=creds)
 

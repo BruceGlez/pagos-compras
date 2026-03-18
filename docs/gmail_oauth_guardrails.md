@@ -17,7 +17,10 @@ python manage.py autorizar_gmail_oauth
 This command must request BOTH scopes.
 
 ## Token location
-- `/home/bruce/.openclaw/workspace/.secrets/gmail_oauth_token.json`
+- Send token: `/home/bruce/.openclaw/workspace/.secrets/gmail_oauth_token.json`
+- Inbox token: `/home/bruce/.openclaw/workspace/.secrets/gmail_oauth_inbox_token.json`
+
+Inbox reads (`Leer inbox`) only use the inbox token, so a send-only reauth cannot break inbox again.
 
 ## Do not overwrite token with stale/partial scopes
 If any helper/script/link asks for `gmail.send` only, or `gmail.readonly` instead of `gmail.modify`, DO NOT run it in production.

@@ -138,6 +138,7 @@ SOLICITUD_FACTURA_TEST_TO = os.getenv("SOLICITUD_FACTURA_TEST_TO", "bgonzalez@un
 
 GMAIL_OAUTH_CLIENT_FILE = os.getenv("GMAIL_OAUTH_CLIENT_FILE", str(BASE_DIR.parent / ".secrets" / "gmail_oauth_client.json"))
 GMAIL_OAUTH_TOKEN_FILE = os.getenv("GMAIL_OAUTH_TOKEN_FILE", str(BASE_DIR.parent / ".secrets" / "gmail_oauth_token.json"))
+GMAIL_OAUTH_INBOX_TOKEN_FILE = os.getenv("GMAIL_OAUTH_INBOX_TOKEN_FILE", str(BASE_DIR.parent / ".secrets" / "gmail_oauth_inbox_token.json"))
 
 # Validación de beneficiario (titular cuenta vs emisor XML)
 BENEFICIARY_MATCH_YELLOW_THRESHOLD = float(os.getenv("BENEFICIARY_MATCH_YELLOW_THRESHOLD", "0.45"))
