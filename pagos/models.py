@@ -714,6 +714,12 @@ class AplicacionAnticipo(TimestampedModel):
         self.anticipo.save(update_fields=["pendiente_aplicar", "updated_at"])
         return result
 
+    def delete(self, *args, **kwargs):
+        anticipo = self.anticipo
+        result = super().delete(*args, **kwargs)
+        anticipo.save(update_fields=["pendiente_aplicar", "updated_at"])
+        return result
+
 
 class DocumentoCompra(TimestampedModel):
     compra = models.ForeignKey(

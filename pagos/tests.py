@@ -61,6 +61,20 @@ class PagosFlowTests(TestCase):
         self.assertEqual(self.anticipo.saldo_disponible, 6000)
         self.assertEqual(self.compra.saldo_por_pagar, 11000)
 
+    def test_quitar_aplicacion_reactiva_anticipo_a_pendiente(self):
+        app = AplicacionAnticipo.objects.create(
+            anticipo=self.anticipo,
+            compra=self.compra,
+            fecha=timezone.now().date(),
+            monto_aplicado=10000,
+        )
+        self.anticipo.refresh_from_db()
+        self.assertEqual(self.anticipo.pendiente_aplicar, "APLICADO")
+
+        app.delete()
+        self.anticipo.refresh_from_db()
+        self.assertEqual(self.anticipo.pendiente_aplicar, "PENDIENTE")
+
     def test_divisiones_no_exceden_100_por_ciento(self):
         Compra.objects.create(
             numero_compra=1,

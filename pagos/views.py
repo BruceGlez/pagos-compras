@@ -941,6 +941,14 @@ def compra_flujo_view(request, compra_id):
             return redirect(f"/compras/{compra.id}/flujo/?step={compra.flujo_step_default}")
         form_name = request.POST.get("flow_form")
 
+        # HTML has embedded anticipo action forms inside the main flujo form; when users click
+        # "Guardar y continuar" in anticipos, browsers may still submit flow_form=anticipo_aplicar/quitar.
+        # Normalize those cases back to the main anticipos form unless the explicit action flag is present.
+        if form_name == "anticipo_aplicar" and (request.POST.get("apply_anticipo") or "") != "1":
+            form_name = "anticipos"
+        if form_name == "anticipo_quitar" and (request.POST.get("remove_anticipo") or "") != "1":
+            form_name = "anticipos"
+
         if compra.es_base_referencia_solo and form_name in {
             "solicitar_factura",
             "revisar_factura",
@@ -1829,18 +1837,31 @@ def compra_flujo_view(request, compra_id):
                 return redirect(f"/compras/{compra.id}/flujo/?step=dividir")
             messages.error(request, "Error al crear division.")
         elif form_name == "anticipo_aplicar":
+            if (request.POST.get("apply_anticipo") or "") != "1":
+                messages.info(request, "No se aplicó anticipo: acción no confirmada.")
+                return redirect(f"/compras/{compra.id}/flujo/?step=anticipos")
+
             anticipo_id = (request.POST.get("anticipo_id") or "").strip()
             monto_raw = (request.POST.get("monto_aplicar") or "").strip()
-            try:
-                monto = Decimal(monto_raw or "0")
-            except Exception:
-                monto = Decimal("0")
             anticipo = Anticipo.objects.filter(id=anticipo_id, productor=compra.productor).first() if anticipo_id.isdigit() else None
             if not anticipo:
                 messages.error(request, "Anticipo no encontrado para este productor.")
                 return redirect(f"/compras/{compra.id}/flujo/?step=anticipos")
-            if monto <= 0:
+
+            auto_mode = not monto_raw
+            try:
+                monto = Decimal(monto_raw) if monto_raw else Decimal("0")
+            except Exception:
+                messages.error(request, "Monto inválido. Captura un número válido o deja vacío para auto-aplicar.")
+                return redirect(f"/compras/{compra.id}/flujo/?step=anticipos")
+
+            if auto_mode:
                 monto = min(anticipo.saldo_disponible, compra.saldo_por_pagar)
+            else:
+                if monto <= 0:
+                    messages.warning(request, "Monto 0 o negativo: no se aplicó anticipo.")
+                    return redirect(f"/compras/{compra.id}/flujo/?step=anticipos")
+
             try:
                 AplicacionAnticipo.objects.create(
                     anticipo=anticipo,
@@ -1853,6 +1874,10 @@ def compra_flujo_view(request, compra_id):
                 messages.error(request, f"No se pudo aplicar anticipo: {e}")
             return redirect(f"/compras/{compra.id}/flujo/?step=anticipos")
         elif form_name == "anticipo_quitar":
+            if (request.POST.get("remove_anticipo") or "") != "1":
+                messages.info(request, "No se quitó aplicación de anticipo: acción no confirmada.")
+                return redirect(f"/compras/{compra.id}/flujo/?step=anticipos")
+
             app_id = (request.POST.get("app_id") or "").strip()
             app = compra.aplicaciones_anticipo.filter(id=app_id).first() if app_id.isdigit() else None
             if not app:
