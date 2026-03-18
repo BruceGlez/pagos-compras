@@ -1,4 +1,5 @@
 from django import forms
+from django.core.validators import validate_email
 
 from .catalogs import (
     SAT_FORMAS_PAGO,
@@ -116,13 +117,42 @@ class BeneficiaryValidationExceptionForm(BootstrapFormMixin, forms.ModelForm):
 class ContadorForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = Contador
-        fields = ["nombre", "telefono", "email", "activo"]
+        fields = ["nombre", "telefono", "email", "emails_adicionales", "activo"]
+        labels = {
+            "email": "Correo principal",
+            "emails_adicionales": "Correos adicionales (separados por coma o salto de línea)",
+        }
 
     def clean_email(self):
         email = (self.cleaned_data.get("email") or "").strip()
         if not email:
-            raise forms.ValidationError("El correo es obligatorio para registrar un contador.")
+            raise forms.ValidationError("El correo principal es obligatorio para registrar un contador.")
+        validate_email(email)
         return email
+
+    def clean_emails_adicionales(self):
+        raw = (self.cleaned_data.get("emails_adicionales") or "").strip()
+        if not raw:
+            return ""
+
+        chunks = []
+        for part in raw.replace(";", ",").replace("\n", ",").split(","):
+            mail = part.strip()
+            if not mail:
+                continue
+            validate_email(mail)
+            chunks.append(mail)
+
+        # Deduplicar preservando orden
+        out = []
+        seen = set()
+        for m in chunks:
+            k = m.lower()
+            if k in seen:
+                continue
+            seen.add(k)
+            out.append(m)
+        return ", ".join(out)
 
 
 class EmailTemplateForm(BootstrapFormMixin, forms.ModelForm):

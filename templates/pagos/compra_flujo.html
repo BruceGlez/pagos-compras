@@ -135,7 +135,13 @@
                                 <div><strong>Productor actual:</strong> {{ compra.productor.nombre }}</div>
                                 <div><strong>RFC productor:</strong> {{ compra.productor.rfc|default:'(faltante)' }}</div>
                                 <div><strong>Contador ligado:</strong> {{ compra.productor.contador.nombre|default:'(faltante)' }}</div>
-                                <div><strong>Correo contador:</strong> {{ compra.productor.contador.email|default:'(faltante)' }}</div>
+                                <div><strong>Correos contador:</strong>
+                                    {% if invoice_recipients %}
+                                        {{ invoice_recipients|join:", " }}
+                                    {% else %}
+                                        (faltante)
+                                    {% endif %}
+                                </div>
                                 {% if productor_missing_fields %}
                                 <div class="mt-2 text-warning"><strong>Faltan datos:</strong> {{ productor_missing_fields|join:", " }}</div>
                                 <a class="btn btn-sm btn-outline-warning mt-1" href="/productores/{{ compra.productor.id }}/editar/?next=/compras/{{ compra.id }}/flujo/%3Fstep%3Dsolicitar_factura">Completar datos del productor</a>
@@ -462,7 +468,7 @@
                     <form method="post" class="mb-0">
                         {% csrf_token %}
                         <input type="hidden" name="flow_form" value="enviar_solicitud_email">
-                        <button class="btn btn-outline-primary btn-sm" type="submit" {% if not compra.correo and not compra.productor.contador.email %}disabled title="Falta correo de contador"{% endif %}>Enviar solicitud al contador</button>
+                        <button class="btn btn-outline-primary btn-sm" type="submit" {% if not has_invoice_recipients %}disabled title="Faltan correos de contador"{% endif %}>Enviar solicitud al contador</button>
                     </form>
                     <form method="post" class="mb-0">
                         {% csrf_token %}

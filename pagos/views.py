@@ -84,6 +84,45 @@ def _can_write(user):
     return user.groups.filter(name__in=["Admin", "Operador"]).exists()
 
 
+def _split_email_list(raw: str):
+    items = []
+    for part in (raw or "").replace(";", ",").replace("\n", ",").split(","):
+        m = part.strip()
+        if not m:
+            continue
+        items.append(m)
+    out = []
+    seen = set()
+    for m in items:
+        k = m.lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(m)
+    return out
+
+
+def _invoice_recipients_for_compra(compra: Compra):
+    recipients = []
+    if (compra.correo or "").strip():
+        recipients.extend(_split_email_list(compra.correo))
+
+    contador = getattr(compra.productor, "contador", None)
+    if contador:
+        recipients.extend(_split_email_list(contador.email or ""))
+        recipients.extend(_split_email_list(getattr(contador, "emails_adicionales", "") or ""))
+
+    out = []
+    seen = set()
+    for m in recipients:
+        k = m.lower()
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(m)
+    return out
+
+
 def _attach_email_proof_to_expediente(
     compra: Compra,
     *,
@@ -1099,9 +1138,10 @@ def compra_flujo_view(request, compra_id):
                 return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
             messages.error(request, "No se pudo crear el facturador. Revisa los datos.")
         elif form_name == "enviar_solicitud_email":
-            to_email = (compra.correo or (compra.productor.contador.email if compra.productor.contador else "") or "").strip()
-            if not to_email:
-                messages.error(request, "No hay correo de contador configurado para esta compra.")
+            recipients = _invoice_recipients_for_compra(compra)
+            to_email = ", ".join(recipients)
+            if not recipients:
+                messages.error(request, "No hay correos de contador configurados para esta compra.")
                 return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
             payload = build_invoice_request_email(compra)
             subject = payload["subject"]
@@ -1124,7 +1164,7 @@ def compra_flujo_view(request, compra_id):
                 if provider == "gmail_oauth":
                     provider_msg_id = send_gmail(to_email, subject, body, html_body=html_body, attachments=attachments)
                 else:
-                    msg = EmailMultiAlternatives(subject, body, settings.DEFAULT_FROM_EMAIL, [to_email])
+                    msg = EmailMultiAlternatives(subject, body, settings.DEFAULT_FROM_EMAIL, recipients)
                     if html_body:
                         msg.attach_alternative(html_body, "text/html")
                     for att in attachments:
@@ -1369,6 +1409,44 @@ def compra_flujo_view(request, compra_id):
                 if v.valid and not compra.uuid_factura:
                     compra.uuid_factura = v.uuid or compra.uuid_factura
                     compra.save(update_fields=["uuid_factura", "updated_at"])
+
+                # Auto-align workflow after successful inbox import + XML validation.
+                actor = str(getattr(request.user, "username", "operador") or "operador")
+                try:
+                    if v.valid:
+                        transition_compra(
+                            compra,
+                            WorkflowStateChoices.INVOICE_RECEIVED,
+                            actor=actor,
+                            reason="Inbox import: XML/PDF recibidos",
+                        )
+                        transition_compra(
+                            compra,
+                            WorkflowStateChoices.INVOICE_VALID,
+                            actor=actor,
+                            reason="Inbox import: validación CFDI aprobada",
+                        )
+                        transition_compra(
+                            compra,
+                            WorkflowStateChoices.WAITING_BANK_CONFIRMATION,
+                            actor=actor,
+                            reason="Inbox import: esperando confirmación bancaria",
+                        )
+                    else:
+                        transition_compra(
+                            compra,
+                            WorkflowStateChoices.INVOICE_RECEIVED,
+                            actor=actor,
+                            reason="Inbox import: factura recibida (validación pendiente/bloqueada)",
+                        )
+                        transition_compra(
+                            compra,
+                            WorkflowStateChoices.INVOICE_BLOCKED,
+                            actor=actor,
+                            reason="Inbox import: validación CFDI no aprobada",
+                        )
+                except ValueError:
+                    pass
 
                 try:
                     mark_gmail_message_processed(str(pick.get("message_id") or ""), label_name="pagos-processed")
@@ -1899,6 +1977,8 @@ def compra_flujo_view(request, compra_id):
 
     inbox_factura_preview = request.session.get(f"inbox_factura_preview_{compra.id}") or []
 
+    invoice_recipients = _invoice_recipients_for_compra(compra)
+
     solicitud_resumen = {
         "contador": (compra.contador or (compra.productor.contador.nombre if compra.productor.contador else "") or "").strip(),
         "correo": (compra.correo or (compra.productor.contador.email if compra.productor.contador else "") or "").strip(),
@@ -2026,6 +2106,8 @@ def compra_flujo_view(request, compra_id):
             "solicitud_factura_texto": build_invoice_request_message(compra),
             "solicitud_logs": solicitud_logs,
             "solicitud_resumen": solicitud_resumen,
+            "invoice_recipients": invoice_recipients,
+            "has_invoice_recipients": bool(invoice_recipients),
             "inbox_factura_preview": inbox_factura_preview,
             "productor_missing_fields": productor_missing_fields,
             "has_pago_comprobante": has_pago_comprobante,

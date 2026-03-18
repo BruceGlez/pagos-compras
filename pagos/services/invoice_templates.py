@@ -59,7 +59,12 @@ def _ctx(compra):
 
 def _select_template(compra):
     fact = compra.facturador
-    regimen = ((fact.regimen_fiscal if fact else "") or compra.regimen_fiscal or "").upper()
+    regimen = (
+        (fact.regimen_fiscal if fact else "")
+        or (compra.productor.regimen_fiscal if getattr(compra, "productor", None) else "")
+        or compra.regimen_fiscal
+        or ""
+    ).upper()
     scenario = "GENERAL"
     if "626" in regimen or "RESICO" in regimen:
         scenario = "RESICO"

@@ -183,6 +183,7 @@ class Contador(TimestampedModel):
     nombre = models.CharField(max_length=200)
     telefono = models.CharField(max_length=40, blank=True)
     email = models.EmailField(blank=True)
+    emails_adicionales = models.TextField(blank=True, default="")
     activo = models.BooleanField(default=True)
 
     class Meta:

@@ -11,7 +11,9 @@ from .models import (
     Anticipo,
     AplicacionAnticipo,
     Compra,
+    Contador,
     DocumentoCompra,
+    EmailTemplate,
     InvoiceValidationResult,
     MonedaChoices,
     PagoCompra,
@@ -19,7 +21,8 @@ from .models import (
     TipoCambio,
     WorkflowStateChoices,
 )
-from .services import parse_and_validate_cfdi_xml
+from .forms import ContadorForm
+from .services import build_invoice_request_email, parse_and_validate_cfdi_xml
 
 
 class PagosFlowTests(TestCase):
@@ -177,9 +180,23 @@ class PagosFlowTests(TestCase):
         self.assertEqual(result["uuid"], "123e4567-e89b-12d3-a456-426614174000")
 
 
+class ContadorEmailsTests(TestCase):
+    def test_contador_form_admite_emails_adicionales_y_deduplica(self):
+        form = ContadorForm(data={
+            "nombre": "Conta 1",
+            "telefono": "",
+            "email": "main@example.com",
+            "emails_adicionales": "a@example.com; b@example.com\na@example.com",
+            "activo": True,
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+        obj = form.save()
+        self.assertEqual(obj.emails_adicionales, "a@example.com, b@example.com")
+
+
 class QueueAndInboxGuardsTests(TestCase):
     def setUp(self):
-        self.user = get_user_model().objects.create_user(username="operador", password="secret123")
+        self.user = get_user_model().objects.create_superuser(username="operador", email="op@example.com", password="secret123")
         self.client.force_login(self.user)
         self.productor = Productor.objects.create(codigo="P002", nombre="Proveedor Uno", rfc="AAA010101AAA")
         self.tc = TipoCambio.objects.create(fecha=timezone.now().date(), tc=17.2500)
@@ -238,7 +255,7 @@ class QueueAndInboxGuardsTests(TestCase):
         mock_fetch.return_value = [{"message_id": "m1", "filename": "f1.xml", "bytes": b"<xml/>"}]
 
         url = reverse("compra_flujo", args=[compra.id]) + "?step=revisar_factura"
-        self.client.post(url, {"form_name": "importar_inbox_factura", "inbox_pick": "m1||f1.xml"}, follow=True)
+        self.client.post(url, {"flow_form": "importar_inbox_factura", "inbox_pick": "m1||f1.xml"}, follow=True)
 
         self.assertEqual(compra.documentos.filter(etapa="factura").count(), 1)
         mock_validate.assert_not_called()
@@ -270,11 +287,103 @@ class QueueAndInboxGuardsTests(TestCase):
         mock_validate.return_value = _V()
 
         url = reverse("compra_flujo", args=[compra.id]) + "?step=revisar_factura"
-        self.client.post(url, {"form_name": "importar_inbox_factura", "inbox_pick": "m2||nuevo.xml"}, follow=True)
+        self.client.post(url, {"flow_form": "importar_inbox_factura", "inbox_pick": "m2||nuevo.xml"}, follow=True)
 
         self.assertEqual(compra.documentos.filter(etapa="factura").count(), 1)
         self.assertLessEqual(mock_validate.call_count, 1)
         self.assertLessEqual(mock_mark.call_count, 1)
+
+    @patch("pagos.views.mark_gmail_message_processed")
+    @patch("pagos.views.fetch_gmail_attachments_for_compra")
+    def test_inbox_import_valida_mueve_a_waiting_bank_confirmation(self, mock_fetch, mock_mark):
+        compra = self._make_compra(numero_compra=203, workflow_state=WorkflowStateChoices.WAITING_INVOICE)
+
+        doc = DocumentoCompra(compra=compra, etapa="compra_original", tipo_documento="COMPRA_ORIGINAL")
+        doc.archivo.save("compra.pdf", ContentFile(b"%PDF-1.4 base"), save=True)
+
+        session = self.client.session
+        session[f"inbox_factura_preview_{compra.id}"] = [{
+            "key": "m3||f.xml",
+            "message_id": "m3",
+            "xml_filename": "f.xml",
+            "pdf_filename": "f.pdf",
+        }]
+        session.save()
+
+        xml_ok = b'''<?xml version="1.0" encoding="UTF-8"?>
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Moneda="USD" MetodoPago="PUE" Total="1000">
+  <cfdi:Emisor Rfc="AAA010101AAA" />
+  <cfdi:Receptor Rfc="UAM140522Q51" UsoCFDI="G01" />
+  <cfdi:Impuestos>
+    <cfdi:Traslados><cfdi:Traslado Impuesto="002" TasaOCuota="0.000000" /></cfdi:Traslados>
+  </cfdi:Impuestos>
+  <cfdi:Complemento><tfd:TimbreFiscalDigital UUID="uuid-ok" /></cfdi:Complemento>
+</cfdi:Comprobante>'''
+        mock_fetch.return_value = [
+            {"message_id": "m3", "filename": "f.xml", "bytes": xml_ok},
+            {"message_id": "m3", "filename": "f.pdf", "bytes": b"%PDF-1.4"},
+        ]
+
+        url = reverse("compra_flujo", args=[compra.id]) + "?step=revisar_factura"
+        self.client.post(url, {"flow_form": "importar_inbox_factura", "inbox_pick": "m3||f.xml"}, follow=True)
+
+        compra.refresh_from_db()
+        self.assertEqual(compra.workflow_state, WorkflowStateChoices.WAITING_BANK_CONFIRMATION)
+        self.assertEqual(compra.uuid_factura, "uuid-ok")
+        mock_mark.assert_called_once_with("m3", label_name="pagos-processed")
+
+
+class InvoiceTemplateSelectionTests(TestCase):
+    def test_uses_productor_regimen_for_resico_when_facturador_absent(self):
+        productor = Productor.objects.create(
+            codigo="P003",
+            nombre="Proveedor Resico",
+            regimen_fiscal="626 Régimen Simplificado de Confianza",
+            regimen_fiscal_codigo="626",
+        )
+        tc = TipoCambio.objects.create(fecha=timezone.now().date(), tc=17.2500)
+        compra = Compra.objects.create(
+            numero_compra=300,
+            productor=productor,
+            fecha_de_pago=timezone.now().date(),
+            fecha_liq=timezone.now().date(),
+            compra_en_libras=1000,
+            tipo_cambio=tc,
+            # stale value at compra level (historical drift)
+            regimen_fiscal="612 Personas Físicas con Actividades Empresariales y Profesionales",
+        )
+
+        EmailTemplate.objects.create(
+            code="GENERAL_STD",
+            nombre="General",
+            scenario="GENERAL",
+            subject_template="GENERAL {compra_numero}",
+            body_template="GENERAL",
+            is_default=True,
+            activo=True,
+        )
+        EmailTemplate.objects.create(
+            code="AE_STD",
+            nombre="AE",
+            scenario="AE",
+            subject_template="AE {compra_numero}",
+            body_template="AE",
+            is_default=True,
+            activo=True,
+        )
+        EmailTemplate.objects.create(
+            code="RESICO_STD",
+            nombre="RESICO",
+            scenario="RESICO",
+            subject_template="RESICO {compra_numero}",
+            body_template="RESICO",
+            is_default=True,
+            activo=True,
+        )
+
+        payload = build_invoice_request_email(compra)
+        self.assertEqual(payload["scenario"], "RESICO")
+        self.assertEqual(payload["template_code"], "RESICO_STD")
 
 
 class ResicoPolicyValidationTests(TestCase):
