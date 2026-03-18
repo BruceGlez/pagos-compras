@@ -117,6 +117,43 @@ class PagosFlowTests(TestCase):
         self.assertEqual(division.parent_compra_id, self.compra.id)
         self.assertEqual(division.flujo_codigo, "captura")
 
+    def test_base_parcialmente_dividida_usa_monto_remanente(self):
+        self.compra.compra_en_libras = 1000
+        self.compra.save(update_fields=["compra_en_libras", "updated_at"])
+
+        Compra.objects.create(
+            numero_compra=1,
+            productor=self.productor,
+            fecha_liq=timezone.now().date(),
+            fecha_de_pago=timezone.now().date(),
+            parent_compra=self.compra,
+            porcentaje_division=40,
+            compra_en_libras=400,
+            tipo_cambio=self.tc,
+            pacas=10,
+        )
+
+        self.assertEqual(self.compra.monto_objetivo_operativo, 600)
+
+    def test_base_100_dividida_se_vuelve_referencia_solo(self):
+        self.compra.compra_en_libras = 1000
+        self.compra.save(update_fields=["compra_en_libras", "updated_at"])
+
+        Compra.objects.create(
+            numero_compra=1,
+            productor=self.productor,
+            fecha_liq=timezone.now().date(),
+            fecha_de_pago=timezone.now().date(),
+            parent_compra=self.compra,
+            porcentaje_division=100,
+            compra_en_libras=1000,
+            tipo_cambio=self.tc,
+            pacas=10,
+        )
+        self.compra.refresh_from_db()
+        self.assertTrue(self.compra.es_base_referencia_solo)
+        self.assertEqual(self.compra.flujo_codigo, "completo")
+
     def test_pago_en_pesos_se_convierte_a_usd_con_tc_pactado(self):
         fecha_sin_tc = timezone.now().date() + timedelta(days=1)
         self.compra.fecha_liq = fecha_sin_tc

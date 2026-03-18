@@ -432,7 +432,10 @@ def compras_operativas_view(request):
 
 def _queue_blockers_for_compra(c: Compra):
     b = []
-    has_compra_pdf = c.documentos.filter(etapa="compra_original", archivo__iendswith=".pdf").exists()
+    if c.es_base_referencia_solo:
+        return ["Compra base de referencia (100% dividida)"]
+
+    has_compra_pdf = c.has_compra_original_pdf_for_flow
     if not has_compra_pdf:
         b.append("Falta compra original PDF")
     if not (c.productor.rfc or "").strip():
@@ -459,7 +462,7 @@ def _queue_blockers_for_compra(c: Compra):
 
 @login_required
 def readiness_queue_view(request):
-    qs = Compra.objects.select_related("productor").filter(cancelada=False).order_by("fecha_liq", "id")
+    qs = Compra.objects.select_related("productor", "parent_compra").filter(cancelada=False).order_by("fecha_liq", "id")
     state = (request.GET.get("state") or "").strip()
     if state:
         qs = qs.filter(workflow_state=state)
@@ -483,7 +486,7 @@ def readiness_queue_view(request):
         "PAID": base_q.filter(workflow_state=WorkflowStateChoices.PAID).count(),
     }
 
-    queue_items = list(qs[:300])
+    queue_items = [c for c in list(qs[:300]) if not c.es_base_referencia_solo]
 
     priority_scores = {}
     for c in queue_items:
@@ -937,6 +940,24 @@ def compra_flujo_view(request, compra_id):
             messages.error(request, "No tienes permisos de edición.")
             return redirect(f"/compras/{compra.id}/flujo/?step={compra.flujo_step_default}")
         form_name = request.POST.get("flow_form")
+
+        if compra.es_base_referencia_solo and form_name in {
+            "solicitar_factura",
+            "revisar_factura",
+            "enviar_solicitud_email",
+            "enviar_solicitud_email_test",
+            "leer_inbox_factura",
+            "importar_inbox_factura",
+            "pago_registrar",
+            "bank_confirm",
+            "deudas",
+            "anticipos",
+            "anticipo_aplicar",
+            "anticipo_quitar",
+        }:
+            messages.warning(request, "Compra base 100% dividida: solo referencia/expediente. Gestiona pipeline en las divisiones.")
+            return redirect(f"/compras/{compra.id}/flujo/?step=expediente")
+
         if form_name == "cancelar_compra":
             cancelar_form = CancelarCompraForm(request.POST, prefix="cancel")
             user = getattr(request, "user", None)
@@ -2024,7 +2045,7 @@ def compra_flujo_view(request, compra_id):
         productor_missing_fields.append("Correo de contador")
 
     docs_compra_original = list(compra.documentos.filter(etapa="compra_original").order_by("-created_at")[:5])
-    has_compra_original_pdf = compra.documentos.filter(etapa="compra_original", archivo__iendswith=".pdf").exists()
+    has_compra_original_pdf = compra.has_compra_original_pdf_for_flow
     has_compra_original_mxn_pdf = any(
         str(getattr(d, "archivo", "")).lower().endswith(".pdf")
         and (

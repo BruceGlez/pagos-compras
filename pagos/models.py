@@ -432,8 +432,17 @@ class Compra(TimestampedModel):
         return value or Decimal("0")
 
     @property
+    def monto_objetivo_operativo(self):
+        base = self.compra_en_libras or Decimal("0")
+        if self.es_division:
+            return base
+        # En compra base: si hay divisiones parciales, el objetivo operativo es el remanente.
+        remanente = base - self.total_monto_dividido
+        return remanente if remanente > 0 else Decimal("0")
+
+    @property
     def saldo_por_pagar(self):
-        objetivo = self.compra_en_libras or Decimal("0")
+        objetivo = self.monto_objetivo_operativo
         deuda = self.total_deuda_en_dls or Decimal("0")
         resico = self.retencion_resico or Decimal("0")
         return objetivo - self.total_pagado_vigente - self.total_aplicado_anticipos - deuda - resico
@@ -557,6 +566,21 @@ class Compra(TimestampedModel):
         return base - self.total_monto_dividido
 
     @property
+    def es_base_referencia_solo(self):
+        if self.es_division:
+            return False
+        return self.total_porcentaje_dividido >= Decimal("100")
+
+    @property
+    def has_compra_original_pdf_for_flow(self):
+        own = self.documentos.filter(etapa="compra_original", archivo__iendswith=".pdf").exists()
+        if own:
+            return True
+        if self.es_division and self.parent_compra_id:
+            return self.parent_compra.documentos.filter(etapa="compra_original", archivo__iendswith=".pdf").exists()
+        return False
+
+    @property
     def factura_registrada(self):
         return bool(self.factura and self.uuid_factura)
 
@@ -572,10 +596,11 @@ class Compra(TimestampedModel):
 
     @property
     def flujo_codigo(self):
+        if self.es_base_referencia_solo:
+            return "completo"
         if not self.captura_completa:
             return "captura"
-        has_compra_original_pdf = self.documentos.filter(etapa="compra_original", archivo__iendswith=".pdf").exists()
-        if not has_compra_original_pdf:
+        if not self.has_compra_original_pdf_for_flow:
             return "captura"
         if not self.anticipos_revisados:
             return "anticipos"

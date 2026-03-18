@@ -34,7 +34,12 @@
       <tbody>
       {% for compra in compras %}
         <tr>
-          <td>{{ compra.numero_compra }}</td>
+          <td>
+            {{ compra.numero_compra }}
+            {% if compra.es_division and compra.parent_compra_id %}
+            <div class="small text-muted">División {{ compra.porcentaje_division|floatformat:2 }}% de base #{{ compra.parent_compra.numero_compra }}</div>
+            {% endif %}
+          </td>
           <td>{{ compra.fecha_liq }}</td>
           <td>{{ compra.productor.nombre }}</td>
           <td>

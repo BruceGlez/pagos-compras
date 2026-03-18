@@ -50,12 +50,20 @@
             <tbody>
                 {% for compra in page_obj %}
                 <tr>
-                    <td>{{ compra.numero_compra }}</td>
+                    <td>
+                        {{ compra.numero_compra }}
+                        {% if compra.es_base_referencia_solo %}
+                        <div><span class="badge text-bg-secondary mt-1">Referencia (100% dividida)</span></div>
+                        {% endif %}
+                    </td>
                     <td>
                         {% if compra.es_division %}
                         Division {{ compra.porcentaje_division|floatformat:2 }}%
                         {% else %}
                         Base
+                        {% if compra.es_base_referencia_solo %}
+                        <div class="small text-muted">Solo expediente/referencia</div>
+                        {% endif %}
                         {% endif %}
                     </td>
                     <td>{{ compra.fecha_liq }}</td>
