@@ -96,13 +96,18 @@
           </tr>
           <tr>
             <td>Monto compra</td>
-            <td>{{ compra.compra_en_libras|default:"-" }}</td>
+            <td>
+              {{ expected_total_display|default:"-" }}
+              {% if compra.expected_moneda %}
+                {{ compra.expected_moneda|upper }}
+              {% endif %}
+            </td>
             <td>{{ ultima.raw_result.total_comprobante|default:"-" }}</td>
             <td>
               {% if monto_within_tolerance is True %}
                 ✅
               {% elif monto_within_tolerance is False %}
-                ❌ (dif: {{ monto_diff }})
+                ❌ (dif: {{ monto_diff }}, tol: {{ expected_tolerance_display|default:'-' }})
               {% else %}
                 -
               {% endif %}

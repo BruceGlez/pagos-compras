@@ -244,6 +244,24 @@ def _token_similarity(a: str, b: str) -> Decimal:
     return Decimal(str(inter / union)) if union else Decimal("0")
 
 
+def _expected_total_for_invoice_validation(compra: Compra):
+    expected_moneda = (compra.expected_moneda or "").strip().upper()
+
+    base_usd = Decimal(str(compra.compra_en_libras or "0"))
+    tc = Decimal(str(compra.tipo_cambio_valor or "0"))
+
+    if expected_moneda == "MXN":
+        if tc > 0:
+            expected_total = (base_usd * tc).quantize(Decimal("0.01"))
+            tolerance = max(Decimal("3"), (Decimal("3") * tc).quantize(Decimal("0.01")))
+            return str(expected_total), str(tolerance)
+        # Fallback defensivo cuando falta TC pactado.
+        return str(base_usd), "50"
+
+    # USD/default behavior
+    return str(base_usd), "3"
+
+
 def _beneficiary_validation(compra: Compra):
     latest = compra.invoice_validations.first()
     raw = (getattr(latest, "raw_result", {}) or {}) if latest else {}
@@ -1077,8 +1095,8 @@ def compra_flujo_view(request, compra_id):
                         expected_uso_cfdi=(compra.expected_uso_cfdi or ""),
                         expected_metodo_pago=(compra.expected_metodo_pago or ""),
                         expected_forma_pago=(compra.expected_forma_pago or ""),
-                        expected_total_comprobante=str(compra.compra_en_libras or ""),
-                        total_tolerance_usd="3",
+                        expected_total_comprobante=_expected_total_for_invoice_validation(compra)[0],
+                        total_tolerance_usd=_expected_total_for_invoice_validation(compra)[1],
                         requires_resico_retention=requires_resico,
                         resico_policy=resico_policy,
                     )
@@ -1401,8 +1419,8 @@ def compra_flujo_view(request, compra_id):
                     expected_uso_cfdi=(compra.expected_uso_cfdi or ""),
                     expected_metodo_pago=(compra.expected_metodo_pago or ""),
                     expected_forma_pago=(compra.expected_forma_pago or ""),
-                    expected_total_comprobante=str(compra.compra_en_libras or ""),
-                    total_tolerance_usd="3",
+                    expected_total_comprobante=_expected_total_for_invoice_validation(compra)[0],
+                    total_tolerance_usd=_expected_total_for_invoice_validation(compra)[1],
                     requires_resico_retention=requires_resico,
                     resico_policy=resico_policy,
                 )
@@ -2160,14 +2178,59 @@ def compra_validacion_factura_view(request, compra_id):
             expected_uso_cfdi=(compra.expected_uso_cfdi or ""),
             expected_metodo_pago=(compra.expected_metodo_pago or ""),
             expected_forma_pago=(compra.expected_forma_pago or ""),
-            expected_total_comprobante=str(compra.compra_en_libras or ""),
-            total_tolerance_usd="3",
+            expected_total_comprobante=_expected_total_for_invoice_validation(compra)[0],
+            total_tolerance_usd=_expected_total_for_invoice_validation(compra)[1],
             requires_resico_retention=requires_resico,
             resico_policy=resico_policy,
         )
-        if v.valid and v.uuid and compra.uuid_factura != v.uuid:
-            compra.uuid_factura = v.uuid
-            compra.save(update_fields=["uuid_factura", "updated_at"])
+        actor = str(getattr(request.user, "username", "operador") or "operador")
+        if v.valid:
+            updates = []
+            if v.uuid and compra.uuid_factura != v.uuid:
+                compra.uuid_factura = v.uuid
+                updates.append("uuid_factura")
+            if updates:
+                updates.append("updated_at")
+                compra.save(update_fields=updates)
+
+            try:
+                transition_compra(
+                    compra,
+                    WorkflowStateChoices.INVOICE_RECEIVED,
+                    actor=actor,
+                    reason="Revalidación XML: factura recibida",
+                )
+            except ValueError:
+                pass
+            try:
+                transition_compra(
+                    compra,
+                    WorkflowStateChoices.INVOICE_VALID,
+                    actor=actor,
+                    reason="Revalidación XML aprobada",
+                )
+            except ValueError:
+                pass
+            try:
+                transition_compra(
+                    compra,
+                    WorkflowStateChoices.WAITING_BANK_CONFIRMATION,
+                    actor=actor,
+                    reason="Revalidación XML aprobada: esperando confirmación bancaria",
+                )
+            except ValueError:
+                pass
+        else:
+            try:
+                transition_compra(
+                    compra,
+                    WorkflowStateChoices.INVOICE_BLOCKED,
+                    actor=actor,
+                    reason=v.blocked_reason or "Revalidación XML fallida",
+                )
+            except ValueError:
+                pass
+
         messages.success(request, "XML revalidado con reglas actuales.")
         return redirect(f"/compras/{compra.id}/validacion-factura/")
 
@@ -2177,14 +2240,21 @@ def compra_validacion_factura_view(request, compra_id):
 
     monto_diff = None
     monto_within_tolerance = None
+    expected_total_display = None
+    expected_tolerance_display = None
     if ultima:
         try:
-            expected = Decimal(str(compra.compra_en_libras or "0"))
+            expected_raw, tolerance_raw = _expected_total_for_invoice_validation(compra)
+            expected = Decimal(str(expected_raw or "0"))
+            tolerance = Decimal(str(tolerance_raw or "0"))
+            expected_total_display = expected
+            expected_tolerance_display = tolerance
+
             actual_raw = (getattr(ultima, "raw_result", {}) or {}).get("total_comprobante", "")
             if str(actual_raw).strip():
                 actual = Decimal(str(actual_raw))
                 monto_diff = abs(expected - actual)
-                monto_within_tolerance = monto_diff <= Decimal("3")
+                monto_within_tolerance = monto_diff <= tolerance
         except (InvalidOperation, TypeError, ValueError):
             monto_diff = None
             monto_within_tolerance = None
@@ -2199,6 +2269,8 @@ def compra_validacion_factura_view(request, compra_id):
             "anterior": anterior,
             "monto_diff": monto_diff,
             "monto_within_tolerance": monto_within_tolerance,
+            "expected_total_display": expected_total_display,
+            "expected_tolerance_display": expected_tolerance_display,
         },
     )
 
