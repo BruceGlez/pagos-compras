@@ -432,8 +432,8 @@ def compras_operativas_view(request):
 
 def _queue_blockers_for_compra(c: Compra):
     b = []
-    if c.es_base_referencia_solo:
-        return ["Compra base de referencia (100% dividida)"]
+    if c.base_pipeline_bloqueado_por_divisiones:
+        return ["Compra base contenedora (pipeline en divisiones)"]
 
     has_compra_pdf = c.has_compra_original_pdf_for_flow
     if not has_compra_pdf:
@@ -488,7 +488,7 @@ def readiness_queue_view(request):
         "PAID": base_q.filter(workflow_state=WorkflowStateChoices.PAID).count(),
     }
 
-    queue_items = [c for c in list(qs[:300]) if not c.es_base_referencia_solo]
+    queue_items = [c for c in list(qs[:300]) if not c.base_pipeline_bloqueado_por_divisiones]
 
     priority_scores = {}
     for c in queue_items:
@@ -656,56 +656,8 @@ def import_compras_view(request):
 
 @login_required
 def readiness_queue_action_view(request, compra_id):
-    if request.method != "POST":
-        return redirect("readiness_queue")
-
-    compra = get_object_or_404(Compra, pk=compra_id)
-    action = (request.POST.get("action") or "").strip()
-    actor = str(getattr(request.user, "username", "operador") or "operador")
-
-    if action == "bank_confirm":
-        if not (compra.cuenta_productor or "").strip():
-            messages.warning(request, "No se puede confirmar banco desde queue: falta cuenta bancaria seleccionada en la compra.")
-            return redirect("readiness_queue")
-        compra.bank_account_confirmed = True
-        if not compra.bank_confirmed_at:
-            compra.bank_confirmed_at = timezone.now()
-        if not compra.bank_confirmation_source:
-            compra.bank_confirmation_source = "queue_quick_action"
-        compra.save(update_fields=["bank_account_confirmed", "bank_confirmed_at", "bank_confirmation_source", "updated_at"])
-
-        moved = False
-        try:
-            if compra.workflow_state == WorkflowStateChoices.INVOICE_VALID:
-                transition_compra(compra, WorkflowStateChoices.WAITING_BANK_CONFIRMATION, actor=actor, reason="Confirmación bancaria desde queue")
-            if compra.workflow_state == WorkflowStateChoices.WAITING_BANK_CONFIRMATION:
-                transition_compra(compra, WorkflowStateChoices.READY_TO_PAY, actor=actor, reason="Confirmación bancaria desde queue")
-                moved = True
-        except ValueError as e:
-            messages.warning(request, f"Cuenta confirmada, pero no se pudo mover estado: {e}")
-            return redirect("readiness_queue")
-
-        if moved:
-            messages.success(request, "Cuenta bancaria confirmada y compra movida a READY_TO_PAY.")
-        else:
-            messages.success(request, "Cuenta bancaria confirmada.")
-    elif action == "mark_ready":
-        blockers = _queue_blockers_for_compra(compra)
-        if blockers:
-            messages.error(request, f"No se puede marcar READY_TO_PAY. Bloqueadores: {', '.join(blockers)}")
-            return redirect("readiness_queue")
-        try:
-            transition_compra(compra, WorkflowStateChoices.READY_TO_PAY, actor=actor, reason="Acción rápida desde queue")
-            messages.success(request, "Compra marcada como READY_TO_PAY.")
-        except ValueError as e:
-            messages.warning(request, f"No se pudo mover a READY_TO_PAY: {e}")
-    elif action == "reopen_invoice":
-        try:
-            transition_compra(compra, WorkflowStateChoices.INVOICE_RECEIVED, actor=actor, reason="Reapertura de factura bloqueada")
-            messages.success(request, "Factura reabierta para corrección.")
-        except ValueError:
-            messages.warning(request, "No se pudo reabrir factura desde el estado actual.")
-
+    # Queue is now read-only for state changes. Pipeline actions must happen in compra flow.
+    messages.warning(request, "La Readiness Queue es solo de consulta. Abre la compra para cambiar estatus desde el pipeline.")
     return redirect("readiness_queue")
 
 
@@ -968,7 +920,7 @@ def compra_flujo_view(request, compra_id):
         if form_name == "anticipo_quitar" and (request.POST.get("remove_anticipo") or "") != "1":
             form_name = "anticipos"
 
-        if compra.es_base_referencia_solo and form_name in {
+        if compra.base_pipeline_bloqueado_por_divisiones and form_name in {
             "solicitar_factura",
             "revisar_factura",
             "enviar_solicitud_email",
@@ -982,7 +934,7 @@ def compra_flujo_view(request, compra_id):
             "anticipo_aplicar",
             "anticipo_quitar",
         }:
-            messages.warning(request, "Compra base 100% dividida: solo referencia/expediente. Gestiona pipeline en las divisiones.")
+            messages.warning(request, "Compra base con divisiones: solo referencia/expediente. Gestiona pipeline en las divisiones.")
             return redirect(f"/compras/{compra.id}/flujo/?step=expediente")
 
         if form_name == "cancelar_compra":
@@ -1866,6 +1818,11 @@ def compra_flujo_view(request, compra_id):
             division_form = CompraDivisionCreateForm(request.POST, compra=compra, prefix="div")
             if division_form.is_valid():
                 pct = division_form.cleaned_data["porcentaje_division"]
+
+                existing_remainder = compra.divisiones.filter(factura="__REMAINDER__").first()
+                if existing_remainder:
+                    existing_remainder.delete()
+
                 child = Compra(
                     numero_compra=compra.numero_compra,
                     fecha_liq=compra.fecha_liq,
@@ -1885,6 +1842,39 @@ def compra_flujo_view(request, compra_id):
                     division_revisada=False,
                 )
                 child.save()
+
+                # Auto-manage remainder leg: BASE-R while total division < 100%.
+                remaining_pct = compra.porcentaje_disponible_division
+                remainder = compra.divisiones.filter(factura="__REMAINDER__").first()
+                if remaining_pct > Decimal("0"):
+                    rem_pacas = (compra.pacas or 0) * remaining_pct / Decimal("100")
+                    rem_monto = (compra.compra_en_libras or 0) * remaining_pct / Decimal("100")
+                    if remainder:
+                        remainder.porcentaje_division = remaining_pct
+                        remainder.pacas = rem_pacas
+                        remainder.compra_en_libras = rem_monto
+                        remainder.save(update_fields=["porcentaje_division", "pacas", "compra_en_libras", "updated_at"])
+                    else:
+                        Compra.objects.create(
+                            numero_compra=compra.numero_compra,
+                            fecha_liq=compra.fecha_liq,
+                            productor=compra.productor,
+                            regimen_fiscal=compra.regimen_fiscal,
+                            parent_compra=compra,
+                            porcentaje_division=remaining_pct,
+                            pacas=rem_pacas,
+                            compra_en_libras=rem_monto,
+                            tipo_cambio=compra.tipo_cambio,
+                            tipo_cambio_valor=compra.tipo_cambio_valor,
+                            moneda=compra.moneda,
+                            factura="__REMAINDER__",
+                            anticipos_revisados=False,
+                            deudas_revisadas=False,
+                            division_revisada=False,
+                        )
+                elif remainder:
+                    remainder.delete()
+
                 messages.success(request, "Division creada correctamente.")
                 return redirect(f"/compras/{compra.id}/flujo/?step=dividir")
             messages.error(request, "Error al crear division.")

@@ -550,8 +550,19 @@ class Compra(TimestampedModel):
         return value or Decimal("0")
 
     @property
+    def total_porcentaje_dividido_manual(self):
+        if self.es_division:
+            return Decimal("0")
+        value = self.divisiones.exclude(factura="__REMAINDER__").aggregate(total=Sum("porcentaje_division"))["total"]
+        return value or Decimal("0")
+
+    @property
     def porcentaje_disponible_division(self):
         return Decimal("100") - self.total_porcentaje_dividido
+
+    @property
+    def porcentaje_disponible_division_manual(self):
+        return Decimal("100") - self.total_porcentaje_dividido_manual
 
     @property
     def total_monto_dividido(self):
@@ -570,6 +581,12 @@ class Compra(TimestampedModel):
         if self.es_division:
             return False
         return self.total_porcentaje_dividido >= Decimal("100")
+
+    @property
+    def base_pipeline_bloqueado_por_divisiones(self):
+        if self.es_division:
+            return False
+        return self.divisiones.exists()
 
     @property
     def has_compra_original_pdf_for_flow(self):
@@ -596,7 +613,7 @@ class Compra(TimestampedModel):
 
     @property
     def flujo_codigo(self):
-        if self.es_base_referencia_solo:
+        if self.base_pipeline_bloqueado_por_divisiones:
             return "completo"
         if not self.captura_completa:
             return "captura"

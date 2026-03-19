@@ -855,10 +855,11 @@ class CompraDivisionCreateForm(BootstrapFormMixin, forms.Form):
         self.fields["factura"].label = "Quien factura (opcional)"
         self.fields["uuid_factura"].label = "UUID factura (opcional)"
         self.fields["porcentaje_division"].widget.attrs["max"] = str(
-            self.compra.porcentaje_disponible_division
+            self.compra.porcentaje_disponible_division_manual
         )
+        base = self.compra.compra_en_libras or 0
         self.fields["monto_division"].widget.attrs["max"] = str(
-            self.compra.monto_disponible_division
+            (base * self.compra.porcentaje_disponible_division_manual / 100) if base else 0
         )
 
     def clean(self):
@@ -872,11 +873,12 @@ class CompraDivisionCreateForm(BootstrapFormMixin, forms.Form):
         if monto:
             if base <= 0:
                 raise forms.ValidationError("La compra base no tiene monto para dividir.")
-            if monto > self.compra.monto_disponible_division:
+            monto_disponible_manual = (base * self.compra.porcentaje_disponible_division_manual) / 100
+            if monto > monto_disponible_manual:
                 raise forms.ValidationError("El monto excede el disponible de la compra.")
             porcentaje = (monto * 100) / base
         elif porcentaje:
-            if porcentaje > self.compra.porcentaje_disponible_division:
+            if porcentaje > self.compra.porcentaje_disponible_division_manual:
                 raise forms.ValidationError("La division excede el disponible de la compra.")
             monto = (base * porcentaje) / 100
         cleaned["porcentaje_division"] = porcentaje

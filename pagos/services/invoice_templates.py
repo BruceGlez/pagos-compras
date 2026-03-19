@@ -14,7 +14,8 @@ def _label(code: str, options):
 def _ctx(compra):
     productor = compra.productor
     facturador = compra.facturador
-    nombre_factura = facturador.nombre if facturador else (compra.factura or productor.nombre)
+    factura_nombre = "" if (compra.factura or "").strip() == "__REMAINDER__" else (compra.factura or "")
+    nombre_factura = facturador.nombre if facturador else (factura_nombre or productor.nombre)
     cfg = XmlValidationConfig.get_default()
     rfc_factura = (
         (compra.expected_rfc_receptor or "").strip().upper()

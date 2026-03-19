@@ -52,17 +52,21 @@
                 <tr>
                     <td>
                         {{ compra.numero_compra }}
-                        {% if compra.es_base_referencia_solo %}
-                        <div><span class="badge text-bg-secondary mt-1">Referencia (100% dividida)</span></div>
+                        {% if compra.base_pipeline_bloqueado_por_divisiones %}
+                        <div><span class="badge text-bg-secondary mt-1">Base contenedora (pipeline en divisiones)</span></div>
                         {% endif %}
                     </td>
                     <td>
                         {% if compra.es_division %}
-                        Division {{ compra.porcentaje_division|floatformat:2 }}%
+                            {% if compra.factura == '__REMAINDER__' and compra.parent_compra_id %}
+                            División {{ compra.parent_compra.numero_compra }}-R (remanente) {{ compra.porcentaje_division|floatformat:2 }}%
+                            {% else %}
+                            Division {{ compra.porcentaje_division|floatformat:2 }}%
+                            {% endif %}
                         {% else %}
                         Base
-                        {% if compra.es_base_referencia_solo %}
-                        <div class="small text-muted">Solo expediente/referencia</div>
+                        {% if compra.base_pipeline_bloqueado_por_divisiones %}
+                        <div class="small text-muted">Solo expediente/referencia (operar en divisiones)</div>
                         {% endif %}
                         {% endif %}
                     </td>
@@ -70,7 +74,9 @@
                     <td>{{ compra.productor.nombre }}</td>
                     <td>
                         {% if compra.solicitud_factura_enviada %}
-                            {% if compra.factura %}
+                            {% if compra.factura == '__REMAINDER__' %}
+                            REMANENTE (auto)
+                            {% elif compra.factura %}
                             {{ compra.factura }}
                             {% elif compra.facturador_id %}
                             {{ compra.facturador.nombre }}

@@ -29,7 +29,7 @@
           <th>Total DLS</th>
           <th>Saldo</th>
           <th>Prioridad</th>
-          <th>Acciones rápidas</th>
+          <th>Acción</th>
         </tr>
       </thead>
       <tbody>
@@ -60,12 +60,7 @@
           <td class="text-nowrap">{{ compra.saldo_por_pagar|money }}</td>
           <td><span class="badge text-bg-dark">{{ priority_scores|get_item:compra.id }}</span></td>
           <td>
-            <div class="d-flex flex-wrap gap-1">
-              <a class="btn btn-sm btn-outline-primary" href="/compras/{{ compra.id }}/flujo/?step={{ compra.flujo_step_default }}">Abrir</a>
-              <form method="post" action="/queue/{{ compra.id }}/action/">{% csrf_token %}<input type="hidden" name="action" value="bank_confirm"><button class="btn btn-sm btn-outline-secondary" type="submit">Confirmar banco</button></form>
-              <form method="post" action="/queue/{{ compra.id }}/action/">{% csrf_token %}<input type="hidden" name="action" value="mark_ready"><button class="btn btn-sm btn-outline-success" type="submit">Marcar ready</button></form>
-              <form method="post" action="/queue/{{ compra.id }}/action/">{% csrf_token %}<input type="hidden" name="action" value="reopen_invoice"><button class="btn btn-sm btn-outline-warning" type="submit">Reabrir factura</button></form>
-            </div>
+            <a class="btn btn-sm btn-outline-primary" href="/compras/{{ compra.id }}/flujo/?step={{ compra.flujo_step_default }}">Abrir compra</a>
           </td>
         </tr>
       {% empty %}

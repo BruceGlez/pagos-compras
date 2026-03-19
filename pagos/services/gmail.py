@@ -125,14 +125,23 @@ def fetch_gmail_attachments_for_compra(compra_numero: int, max_messages: int = 2
     service = build("gmail", "v1", credentials=creds)
     n = int(compra_numero)
     query_strict = f'is:unread has:attachment ("#{n}" OR "compra {n}" OR "compra {n:05d}" OR "{n:05d}")'
-    listing = service.users().messages().list(userId="me", q=query_strict, maxResults=max_messages).execute()
-    msgs = listing.get("messages", []) or []
+    listing_strict = service.users().messages().list(userId="me", q=query_strict, maxResults=max_messages).execute()
+    msgs_strict = listing_strict.get("messages", []) or []
 
-    # Fallback: si no hay hits por token de compra, abrir búsqueda a adjuntos recientes no leídos.
-    if not msgs:
-        query_fallback = "is:unread has:attachment newer_than:30d"
-        listing = service.users().messages().list(userId="me", q=query_fallback, maxResults=max_messages).execute()
-        msgs = listing.get("messages", []) or []
+    # Fallback amplio siempre (merge) para evitar falsos positivos en query estricta.
+    query_fallback = "is:unread has:attachment newer_than:30d"
+    listing_fallback = service.users().messages().list(userId="me", q=query_fallback, maxResults=max_messages).execute()
+    msgs_fallback = listing_fallback.get("messages", []) or []
+
+    # Dedup preserving priority: strict primero, luego fallback.
+    msgs = []
+    seen = set()
+    for m in (msgs_strict + msgs_fallback):
+        mid = str(m.get("id") or "")
+        if not mid or mid in seen:
+            continue
+        seen.add(mid)
+        msgs.append(m)
 
     out = []
     for m in msgs:

@@ -22,9 +22,9 @@
             {% endif %}
         </div>
         {% endif %}
-        {% if compra.es_base_referencia_solo %}
+        {% if compra.base_pipeline_bloqueado_por_divisiones %}
         <div class="alert alert-secondary py-2">
-            <strong>Compra base de referencia</strong>: esta compra está 100% dividida y solo conserva expediente/historial.
+            <strong>Compra base contenedora</strong>: esta compra tiene divisiones y solo conserva expediente/historial.
             El pipeline operativo y pagos deben gestionarse en las divisiones.
         </div>
         {% endif %}
@@ -682,7 +682,13 @@
                 <ul class="list-group">
                     {% for d in divisiones %}
                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <span>ID {{ d.id }} - {{ d.porcentaje_division|floatformat:2 }}%</span>
+                        <span>
+                            {% if d.factura == '__REMAINDER__' %}
+                            {{ compra.numero_compra }}-R (remanente) - {{ d.porcentaje_division|floatformat:2 }}%
+                            {% else %}
+                            ID {{ d.id }} - {{ d.porcentaje_division|floatformat:2 }}%
+                            {% endif %}
+                        </span>
                         <div class="d-flex gap-2">
                             <a class="btn btn-sm btn-outline-secondary" href="/compras/{{ d.id }}/flujo/">Abrir</a>
                             <a class="btn btn-sm btn-outline-secondary" href="/compras/{{ d.id }}/editar/?next={% url 'compra_flujo' compra.id %}%3Fstep%3Ddividir">Editar</a>

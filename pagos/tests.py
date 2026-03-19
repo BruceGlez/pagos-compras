@@ -148,6 +148,8 @@ class PagosFlowTests(TestCase):
         )
 
         self.assertEqual(self.compra.monto_objetivo_operativo, 600)
+        self.assertTrue(self.compra.base_pipeline_bloqueado_por_divisiones)
+        self.assertEqual(self.compra.flujo_codigo, "completo")
 
     def test_base_100_dividida_se_vuelve_referencia_solo(self):
         self.compra.compra_en_libras = 1000
@@ -264,27 +266,15 @@ class QueueAndInboxGuardsTests(TestCase):
         data.update(kwargs)
         return Compra.objects.create(**data)
 
-    def test_mark_ready_bloqueado_si_hay_blockers(self):
-        compra = self._make_compra(workflow_state=WorkflowStateChoices.WAITING_BANK_CONFIRMATION)
-        url = reverse("readiness_queue_action", args=[compra.id])
-        self.client.post(url, {"action": "mark_ready"}, follow=True)
-        compra.refresh_from_db()
-        self.assertEqual(compra.workflow_state, WorkflowStateChoices.WAITING_BANK_CONFIRMATION)
-
-    def test_mark_ready_funciona_cuando_cumple_precondiciones(self):
+    def test_queue_actions_no_cambian_estado_readonly(self):
         compra = self._make_compra(workflow_state=WorkflowStateChoices.WAITING_BANK_CONFIRMATION)
         compra.bank_account_confirmed = True
         compra.save(update_fields=["bank_account_confirmed", "updated_at"])
 
-        doc = DocumentoCompra(compra=compra, etapa="compra_original", tipo_documento="COMPRA_ORIGINAL")
-        doc.archivo.save("compra.pdf", ContentFile(b"%PDF-1.4 base"), save=True)
-
-        InvoiceValidationResult.objects.create(compra=compra, valid=True, uuid="uuid-ok")
-
         url = reverse("readiness_queue_action", args=[compra.id])
         self.client.post(url, {"action": "mark_ready"}, follow=True)
         compra.refresh_from_db()
-        self.assertEqual(compra.workflow_state, WorkflowStateChoices.READY_TO_PAY)
+        self.assertEqual(compra.workflow_state, WorkflowStateChoices.WAITING_BANK_CONFIRMATION)
 
     @patch("pagos.views.mark_gmail_message_processed")
     @patch("pagos.views.create_invoice_validation_for_compra")
