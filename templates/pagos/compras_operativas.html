@@ -2,6 +2,34 @@
 {% load pagos_extras %}
 {% block title %}Compras Operativas{% endblock %}
 {% block content %}
+<style>
+  .compras-compact-table {
+    font-size: 13px;
+  }
+  .compras-compact-table th,
+  .compras-compact-table td {
+    padding: .34rem .46rem;
+    vertical-align: middle;
+    line-height: 1.2;
+  }
+  .compras-compact-table .badge {
+    font-size: 11px;
+    padding: .24rem .4rem;
+  }
+  .compras-compact-table .btn {
+    padding: .24rem .5rem;
+    font-size: 12px;
+    line-height: 1.15;
+  }
+  .compras-compact-truncate {
+    max-width: 170px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+    vertical-align: bottom;
+  }
+</style>
 <div class="card mb-3">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Vista Operativa de Compras</h5>
@@ -30,33 +58,52 @@
 </div>
 
 <div class="card">
+    <div class="card-header py-2 d-flex justify-content-end">
+        <details class="small">
+            <summary class="btn btn-outline-secondary btn-sm">Columnas</summary>
+            <div class="mt-2 border rounded p-2 bg-white" style="min-width:220px;">
+                <div><label><input type="checkbox" data-col-toggle="compra" checked> Compra</label></div>
+                <div><label><input type="checkbox" data-col-toggle="tipo" checked> Tipo</label></div>
+                <div><label><input type="checkbox" data-col-toggle="fecha" checked> Fecha LIQ</label></div>
+                <div><label><input type="checkbox" data-col-toggle="productor" checked> Productor</label></div>
+                <div><label><input type="checkbox" data-col-toggle="factura" checked> Factura</label></div>
+                <div><label><input type="checkbox" data-col-toggle="total" checked> Total DLS</label></div>
+                <div><label><input type="checkbox" data-col-toggle="pago" checked> Pago</label></div>
+                <div><label><input type="checkbox" data-col-toggle="saldo" checked> Saldo</label></div>
+                <div><label><input type="checkbox" data-col-toggle="flujo" checked> Flujo</label></div>
+                <div><label><input type="checkbox" data-col-toggle="accion" checked> Acción</label></div>
+                <div class="mt-2">
+                    <button type="button" id="reset-columnas" class="btn btn-outline-dark btn-sm">Restablecer</button>
+                </div>
+            </div>
+        </details>
+    </div>
     <div class="table-responsive small">
-        <table class="table table-sm table-striped table-hover mb-0 align-middle">
+        <table class="table table-sm table-striped table-hover mb-0 align-middle compras-compact-table">
             <thead>
                 <tr>
-                    <th>Compra</th>
-                    <th>Tipo</th>
-                    <th>Fecha LIQ</th>
-                    <th>Productor</th>
-                    <th>Factura (quien factura)</th>
-                    <th>UUID FACTURA</th>
-                    <th>Total en DLS</th>
-                    <th>Pago</th>
-                    <th>Saldo</th>
-                    <th>Flujo</th>
-                    <th></th>
+                    <th data-col="compra">Compra</th>
+                    <th data-col="tipo">Tipo</th>
+                    <th data-col="fecha">Fecha LIQ</th>
+                    <th data-col="productor">Productor</th>
+                    <th data-col="factura">Factura (quien factura)</th>
+                    <th data-col="total">Total en DLS</th>
+                    <th data-col="pago">Pago</th>
+                    <th data-col="saldo">Saldo</th>
+                    <th data-col="flujo">Flujo</th>
+                    <th data-col="accion"></th>
                 </tr>
             </thead>
             <tbody>
                 {% for compra in page_obj %}
                 <tr>
-                    <td>
+                    <td data-col="compra">
                         {{ compra.numero_compra }}
                         {% if compra.base_pipeline_bloqueado_por_divisiones %}
                         <div><span class="badge text-bg-secondary mt-1">Base contenedora (pipeline en divisiones)</span></div>
                         {% endif %}
                     </td>
-                    <td>
+                    <td data-col="tipo">
                         {% if compra.es_division %}
                             {% if compra.factura == '__REMAINDER__' and compra.parent_compra_id %}
                             División {{ compra.parent_compra.numero_compra }}-R (remanente) {{ compra.porcentaje_division|floatformat:2 }}%
@@ -70,14 +117,14 @@
                         {% endif %}
                         {% endif %}
                     </td>
-                    <td>{{ compra.fecha_liq }}</td>
-                    <td>{{ compra.productor.nombre }}</td>
-                    <td>
+                    <td data-col="fecha">{{ compra.fecha_liq }}</td>
+                    <td data-col="productor"><span class="compras-compact-truncate" title="{{ compra.productor.nombre }}">{{ compra.productor.nombre }}</span></td>
+                    <td data-col="factura">
                         {% if compra.solicitud_factura_enviada %}
                             {% if compra.factura == '__REMAINDER__' %}
                             REMANENTE (auto)
                             {% elif compra.factura %}
-                            {{ compra.factura }}
+                            <span class="compras-compact-truncate" title="{{ compra.factura }}">{{ compra.factura }}</span>
                             {% elif compra.facturador_id %}
                             {{ compra.facturador.nombre }}
                             {% else %}
@@ -87,11 +134,10 @@
                         -
                         {% endif %}
                     </td>
-                    <td>{{ compra.uuid_factura }}</td>
-                    <td class="text-nowrap">{{ compra.compra_en_libras|money }}</td>
-                    <td class="text-nowrap">{{ compra.base_pago|money }}</td>
-                    <td class="text-nowrap">{{ compra.saldo_por_pagar|money }}</td>
-                    <td>
+                    <td data-col="total" class="text-nowrap">{{ compra.compra_en_libras|money }}</td>
+                    <td data-col="pago" class="text-nowrap">{{ compra.base_pago|money }}</td>
+                    <td data-col="saldo" class="text-nowrap">{{ compra.saldo_por_pagar|money }}</td>
+                    <td data-col="flujo">
                         <div><strong>{{ compra.flujo_label }}</strong></div>
                         <small>{{ compra.flujo_progress }}%</small>
                         <div><span class="badge text-bg-info mt-1">{{ compra.workflow_state }}</span></div>
@@ -102,20 +148,12 @@
                         <div><span class="badge text-bg-warning mt-1">Falta UUID factura</span></div>
                         {% endif %}
                     </td>
-                    <td class="d-flex gap-1">
+                    <td data-col="accion">
                         <a class="btn btn-outline-primary btn-sm" href="/compras/{{ compra.id }}/flujo/?step={{ compra.flujo_step_default }}">{{ compra.flujo_label }}</a>
-                        {% if not compra.es_division and compra.captura_completa %}
-                        <a class="btn btn-outline-warning btn-sm" href="/compras/{{ compra.id }}/flujo/?step=dividir">Dividir</a>
-                        {% endif %}
-                        {% if compra.es_division %}
-                        <a class="btn btn-outline-secondary btn-sm" href="/compras/{{ compra.id }}/editar/?next=/compras/">Editar division</a>
-                        {% else %}
-                        <a class="btn btn-outline-secondary btn-sm" href="/compras/{{ compra.id }}/editar/?next=/compras/">Editar base</a>
-                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="11" class="text-center py-4">No hay compras para mostrar.</td></tr>
+                <tr><td colspan="10" class="text-center py-4">No hay compras para mostrar.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -132,4 +170,51 @@
     </div>
     {% endif %}
 </div>
+<script>
+(function () {
+  const key = "compras_operativas_hidden_cols_v1";
+
+  function getHidden() {
+    try { return JSON.parse(localStorage.getItem(key) || "[]"); } catch (_) { return []; }
+  }
+
+  function setHidden(hidden) {
+    localStorage.setItem(key, JSON.stringify(hidden));
+  }
+
+  function applyHidden(hidden) {
+    const set = new Set(hidden || []);
+    document.querySelectorAll("[data-col]").forEach((el) => {
+      const col = el.getAttribute("data-col");
+      el.style.display = set.has(col) ? "none" : "";
+    });
+    document.querySelectorAll("[data-col-toggle]").forEach((cb) => {
+      cb.checked = !set.has(cb.getAttribute("data-col-toggle"));
+    });
+  }
+
+  const hidden = getHidden();
+  applyHidden(hidden);
+
+  document.querySelectorAll("[data-col-toggle]").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      const current = new Set(getHidden());
+      const col = cb.getAttribute("data-col-toggle");
+      if (cb.checked) current.delete(col);
+      else current.add(col);
+      const arr = Array.from(current);
+      setHidden(arr);
+      applyHidden(arr);
+    });
+  });
+
+  const resetBtn = document.getElementById("reset-columnas");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", () => {
+      setHidden([]);
+      applyHidden([]);
+    });
+  }
+})();
+</script>
 {% endblock %}
