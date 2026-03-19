@@ -478,14 +478,15 @@ def readiness_queue_view(request):
             ]
         )
 
-    base_q = Compra.objects.filter(cancelada=False)
+    base_q = Compra.objects.select_related("productor", "parent_compra").filter(cancelada=False)
+    visible_all = [c for c in base_q if not c.base_pipeline_bloqueado_por_divisiones]
     counts = {
-        "WAITING_INVOICE": base_q.filter(workflow_state=WorkflowStateChoices.WAITING_INVOICE).count(),
-        "INVOICE_BLOCKED": base_q.filter(workflow_state=WorkflowStateChoices.INVOICE_BLOCKED).count(),
-        "INVOICE_VALID": base_q.filter(workflow_state=WorkflowStateChoices.INVOICE_VALID).count(),
-        "WAITING_BANK_CONFIRMATION": base_q.filter(workflow_state=WorkflowStateChoices.WAITING_BANK_CONFIRMATION).count(),
-        "READY_TO_PAY": base_q.filter(workflow_state=WorkflowStateChoices.READY_TO_PAY).count(),
-        "PAID": base_q.filter(workflow_state=WorkflowStateChoices.PAID).count(),
+        "WAITING_INVOICE": sum(1 for c in visible_all if c.workflow_state == WorkflowStateChoices.WAITING_INVOICE),
+        "INVOICE_BLOCKED": sum(1 for c in visible_all if c.workflow_state == WorkflowStateChoices.INVOICE_BLOCKED),
+        "INVOICE_VALID": sum(1 for c in visible_all if c.workflow_state == WorkflowStateChoices.INVOICE_VALID),
+        "WAITING_BANK_CONFIRMATION": sum(1 for c in visible_all if c.workflow_state == WorkflowStateChoices.WAITING_BANK_CONFIRMATION),
+        "READY_TO_PAY": sum(1 for c in visible_all if c.workflow_state == WorkflowStateChoices.READY_TO_PAY),
+        "PAID": sum(1 for c in visible_all if c.workflow_state == WorkflowStateChoices.PAID),
     }
 
     queue_items = [c for c in list(qs[:300]) if not c.base_pipeline_bloqueado_por_divisiones]
@@ -2011,6 +2012,22 @@ def compra_flujo_view(request, compra_id):
                             )
                 except ValueError:
                     pass
+
+                # Back-sync workflow when operator rolls back pipeline flags (unchecked + save).
+                compra.refresh_from_db()
+                rollback_reason = None
+                if not compra.anticipos_revisados and compra.workflow_state not in {
+                    WorkflowStateChoices.IMPORTED,
+                    WorkflowStateChoices.DEBT_CALCULATED,
+                }:
+                    rollback_reason = "Rollback: anticipos desmarcados"
+                    compra.set_workflow_state(WorkflowStateChoices.DEBT_CALCULATED, reason=rollback_reason, actor=actor)
+                elif not compra.deudas_revisadas and compra.workflow_state not in {
+                    WorkflowStateChoices.IMPORTED,
+                    WorkflowStateChoices.DEBT_CALCULATED,
+                }:
+                    rollback_reason = "Rollback: deudas desmarcadas"
+                    compra.set_workflow_state(WorkflowStateChoices.DEBT_CALCULATED, reason=rollback_reason, actor=actor)
 
                 messages.success(request, msg)
                 compra.refresh_from_db()

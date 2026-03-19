@@ -140,7 +140,11 @@
                     <td data-col="flujo">
                         <div><strong>{{ compra.flujo_label }}</strong></div>
                         <small>{{ compra.flujo_progress }}%</small>
+                        {% if compra.base_pipeline_bloqueado_por_divisiones %}
+                        <div><span class="badge text-bg-secondary mt-1">CONTAINER</span></div>
+                        {% else %}
                         <div><span class="badge text-bg-info mt-1">{{ compra.workflow_state }}</span></div>
+                        {% endif %}
                         {% if compra.cancelada %}
                         <div><span class="badge text-bg-danger mt-1">CANCELADA</span></div>
                         {% endif %}
