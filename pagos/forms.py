@@ -1,3 +1,5 @@
+from string import Formatter
+
 from django import forms
 from django.core.validators import validate_email
 
@@ -159,6 +161,50 @@ class EmailTemplateForm(BootstrapFormMixin, forms.ModelForm):
     class Meta:
         model = EmailTemplate
         fields = ["code", "nombre", "scenario", "subject_template", "body_template", "is_default", "activo"]
+
+    def clean(self):
+        cleaned = super().clean()
+        subject_tpl = cleaned.get("subject_template") or ""
+        body_tpl = cleaned.get("body_template") or ""
+
+        allowed_fields = {
+            "productor_nombre",
+            "facturador_nombre",
+            "productor_rfc",
+            "compra_numero",
+            "monto_compra",
+            "subtotal_compra",
+            "retencion_125",
+            "total_con_retencion",
+            "moneda_detalle",
+            "moneda",
+            "monto_compra_usd",
+            "monto_compra_mxn",
+            "regimen_fiscal",
+            "forma_pago",
+            "metodo_pago",
+            "uso_cfdi",
+            "forma_pago_detalle",
+            "metodo_pago_detalle",
+            "uso_cfdi_detalle",
+        }
+
+        found = set()
+        fmt = Formatter()
+        for tpl in (subject_tpl, body_tpl):
+            for _, field_name, _, _ in fmt.parse(tpl):
+                if field_name:
+                    found.add(field_name)
+
+        invalid = sorted([f for f in found if f not in allowed_fields])
+        if invalid:
+            raise forms.ValidationError(
+                "Placeholder(s) inválido(s): "
+                + ", ".join(invalid)
+                + ". Usa solo variables permitidas para solicitud de factura."
+            )
+
+        return cleaned
 
 
 class XmlValidationConfigForm(BootstrapFormMixin, forms.ModelForm):

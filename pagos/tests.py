@@ -21,7 +21,7 @@ from .models import (
     TipoCambio,
     WorkflowStateChoices,
 )
-from .forms import ContadorForm
+from .forms import ContadorForm, EmailTemplateForm
 from .services import build_invoice_request_email, parse_and_validate_cfdi_xml
 
 
@@ -435,6 +435,20 @@ class InvoiceTemplateSelectionTests(TestCase):
         payload = build_invoice_request_email(compra)
         self.assertEqual(payload["scenario"], "RESICO")
         self.assertEqual(payload["template_code"], "RESICO_STD")
+
+
+    def test_email_template_form_rechaza_placeholders_invalidos(self):
+        form = EmailTemplateForm(data={
+            "code": "X1",
+            "nombre": "Tpl",
+            "scenario": "GENERAL",
+            "subject_template": "Compra {compra_numero} {foo}",
+            "body_template": "Hola {productor_nombre}",
+            "is_default": True,
+            "activo": True,
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn("foo", str(form.errors))
 
 
 class ResicoPolicyValidationTests(TestCase):

@@ -1244,6 +1244,7 @@ def compra_flujo_view(request, compra_id):
                 compra.fecha_solicitud_factura = timezone.localdate()
                 compra.save(update_fields=["solicitud_factura_enviada", "fecha_solicitud_factura", "updated_at"])
                 actor = str(getattr(request.user, "username", "operador") or "operador")
+                transition_ok = True
                 try:
                     transition_compra(
                         compra,
@@ -1252,8 +1253,18 @@ def compra_flujo_view(request, compra_id):
                         reason="Solicitud de factura enviada a contador",
                     )
                 except ValueError:
-                    pass
-                messages.success(request, f"Solicitud enviada a contador: {to_email} ({provider}).")
+                    transition_ok = False
+
+                if transition_ok:
+                    messages.success(
+                        request,
+                        f"Solicitud enviada ({provider}) a: {to_email}. Estado actualizado a WAITING_INVOICE.",
+                    )
+                else:
+                    messages.warning(
+                        request,
+                        f"Solicitud enviada ({provider}) a: {to_email}, pero no se pudo actualizar workflow a WAITING_INVOICE.",
+                    )
             except Exception as e:
                 EmailOutboxLog.objects.create(
                     compra=compra,
@@ -1569,6 +1580,7 @@ def compra_flujo_view(request, compra_id):
                 compra.fecha_solicitud_factura = timezone.localdate()
                 compra.save(update_fields=["solicitud_factura_enviada", "fecha_solicitud_factura", "updated_at"])
                 actor = str(getattr(request.user, "username", "operador") or "operador")
+                transition_ok = True
                 try:
                     transition_compra(
                         compra,
@@ -1577,9 +1589,12 @@ def compra_flujo_view(request, compra_id):
                         reason="Solicitud de factura enviada por correo TEST",
                     )
                 except ValueError:
-                    pass
+                    transition_ok = False
 
-                messages.success(request, f"Solicitud TEST enviada a {to_email} ({provider}).")
+                if transition_ok:
+                    messages.success(request, f"Solicitud TEST enviada ({provider}) a {to_email}. Estado actualizado a WAITING_INVOICE.")
+                else:
+                    messages.warning(request, f"Solicitud TEST enviada ({provider}) a {to_email}, pero no se pudo actualizar workflow a WAITING_INVOICE.")
             except Exception as e:
                 EmailOutboxLog.objects.create(
                     compra=compra,
