@@ -10,9 +10,10 @@
 <div class="row g-2 mb-3">
   <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=WAITING_INVOICE"><strong>{{ counts.WAITING_INVOICE }}</strong><small>Waiting invoice</small></a></div>
   <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=INVOICE_BLOCKED"><strong>{{ counts.INVOICE_BLOCKED }}</strong><small>Invoice blocked</small></a></div>
-  <div class="col-md-3"><a class="card card-body text-decoration-none" href="/queue/?state=WAITING_BANK_CONFIRMATION"><strong>{{ counts.WAITING_BANK_CONFIRMATION }}</strong><small>Waiting bank confirmation</small></a></div>
+  <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=INVOICE_VALID"><strong>{{ counts.INVOICE_VALID }}</strong><small>Invoice valid</small></a></div>
+  <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=WAITING_BANK_CONFIRMATION"><strong>{{ counts.WAITING_BANK_CONFIRMATION }}</strong><small>Waiting bank confirmation</small></a></div>
   <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=READY_TO_PAY"><strong>{{ counts.READY_TO_PAY }}</strong><small>Ready to pay</small></a></div>
-  <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=PAID"><strong>{{ counts.PAID }}</strong><small>Paid</small></a></div>
+  <div class="col-md-1"><a class="card card-body text-decoration-none" href="/queue/?state=PAID"><strong>{{ counts.PAID }}</strong><small>Paid</small></a></div>
   <div class="col-md-1"><a class="card card-body text-decoration-none" href="/queue/"><strong>All</strong><small>Queue</small></a></div>
 </div>
 

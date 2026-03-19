@@ -449,7 +449,7 @@ def _queue_blockers_for_compra(c: Compra):
         if not has_pdf:
             b.append("Falta PDF factura")
 
-    if c.workflow_state in {WorkflowStateChoices.WAITING_BANK_CONFIRMATION, WorkflowStateChoices.READY_TO_PAY} and not c.bank_account_confirmed:
+    if c.workflow_state in {WorkflowStateChoices.INVOICE_VALID, WorkflowStateChoices.WAITING_BANK_CONFIRMATION, WorkflowStateChoices.READY_TO_PAY} and not c.bank_account_confirmed:
         b.append("Falta confirmación bancaria")
 
     if c.workflow_state == WorkflowStateChoices.READY_TO_PAY:
@@ -471,6 +471,7 @@ def readiness_queue_view(request):
             workflow_state__in=[
                 WorkflowStateChoices.WAITING_INVOICE,
                 WorkflowStateChoices.INVOICE_BLOCKED,
+                WorkflowStateChoices.INVOICE_VALID,
                 WorkflowStateChoices.WAITING_BANK_CONFIRMATION,
                 WorkflowStateChoices.READY_TO_PAY,
                 WorkflowStateChoices.PAID,
@@ -481,6 +482,7 @@ def readiness_queue_view(request):
     counts = {
         "WAITING_INVOICE": base_q.filter(workflow_state=WorkflowStateChoices.WAITING_INVOICE).count(),
         "INVOICE_BLOCKED": base_q.filter(workflow_state=WorkflowStateChoices.INVOICE_BLOCKED).count(),
+        "INVOICE_VALID": base_q.filter(workflow_state=WorkflowStateChoices.INVOICE_VALID).count(),
         "WAITING_BANK_CONFIRMATION": base_q.filter(workflow_state=WorkflowStateChoices.WAITING_BANK_CONFIRMATION).count(),
         "READY_TO_PAY": base_q.filter(workflow_state=WorkflowStateChoices.READY_TO_PAY).count(),
         "PAID": base_q.filter(workflow_state=WorkflowStateChoices.PAID).count(),
@@ -496,6 +498,8 @@ def readiness_queue_view(request):
             score += Decimal("100")
         elif c.workflow_state == WorkflowStateChoices.WAITING_BANK_CONFIRMATION:
             score += Decimal("70")
+        elif c.workflow_state == WorkflowStateChoices.INVOICE_VALID:
+            score += Decimal("60")
         elif c.workflow_state == WorkflowStateChoices.INVOICE_BLOCKED:
             score += Decimal("40")
         elif c.workflow_state == WorkflowStateChoices.WAITING_INVOICE:
@@ -669,7 +673,22 @@ def readiness_queue_action_view(request, compra_id):
         if not compra.bank_confirmation_source:
             compra.bank_confirmation_source = "queue_quick_action"
         compra.save(update_fields=["bank_account_confirmed", "bank_confirmed_at", "bank_confirmation_source", "updated_at"])
-        messages.success(request, "Cuenta bancaria confirmada.")
+
+        moved = False
+        try:
+            if compra.workflow_state == WorkflowStateChoices.INVOICE_VALID:
+                transition_compra(compra, WorkflowStateChoices.WAITING_BANK_CONFIRMATION, actor=actor, reason="Confirmación bancaria desde queue")
+            if compra.workflow_state == WorkflowStateChoices.WAITING_BANK_CONFIRMATION:
+                transition_compra(compra, WorkflowStateChoices.READY_TO_PAY, actor=actor, reason="Confirmación bancaria desde queue")
+                moved = True
+        except ValueError as e:
+            messages.warning(request, f"Cuenta confirmada, pero no se pudo mover estado: {e}")
+            return redirect("readiness_queue")
+
+        if moved:
+            messages.success(request, "Cuenta bancaria confirmada y compra movida a READY_TO_PAY.")
+        else:
+            messages.success(request, "Cuenta bancaria confirmada.")
     elif action == "mark_ready":
         blockers = _queue_blockers_for_compra(compra)
         if blockers:
@@ -1678,9 +1697,10 @@ def compra_flujo_view(request, compra_id):
 
             # Si la cuenta tiene carátula, anexarla automáticamente al expediente de pago.
             if selected.caratula_archivo:
-                pago_docs = list(compra.documentos.filter(etapa="pago").values("archivo", "descripcion"))
+                pago_docs = list(compra.documentos.filter(etapa="pago").values("archivo", "descripcion", "tipo_documento"))
                 has_caratula = any(
-                    ("caratula" in ((d.get("descripcion") or "").lower().replace("á", "a")))
+                    (d.get("tipo_documento") == "CARATULA_BANCARIA")
+                    or ("caratula" in ((d.get("descripcion") or "").lower().replace("á", "a")))
                     or ("caratula" in str(d.get("archivo") or "").lower().replace("á", "a"))
                     for d in pago_docs
                 )
@@ -1688,6 +1708,7 @@ def compra_flujo_view(request, compra_id):
                     DocumentoCompra.objects.create(
                         compra=compra,
                         etapa="pago",
+                        tipo_documento="CARATULA_BANCARIA",
                         descripcion="Carátula bancaria (catálogo cuenta seleccionada)",
                         archivo=selected.caratula_archivo,
                     )
@@ -1702,22 +1723,37 @@ def compra_flujo_view(request, compra_id):
             ])
 
             actor = str(getattr(request.user, "username", "operador") or "operador")
+            transition_error = None
             try:
-                transition_compra(
-                    compra,
-                    WorkflowStateChoices.READY_TO_PAY,
-                    actor=actor,
-                    reason="Cuenta bancaria confirmada",
-                )
-            except ValueError:
-                pass
+                if compra.workflow_state == WorkflowStateChoices.INVOICE_VALID:
+                    transition_compra(
+                        compra,
+                        WorkflowStateChoices.WAITING_BANK_CONFIRMATION,
+                        actor=actor,
+                        reason="Cuenta bancaria confirmada",
+                    )
+                if compra.workflow_state == WorkflowStateChoices.WAITING_BANK_CONFIRMATION:
+                    transition_compra(
+                        compra,
+                        WorkflowStateChoices.READY_TO_PAY,
+                        actor=actor,
+                        reason="Cuenta bancaria confirmada",
+                    )
+            except ValueError as e:
+                transition_error = str(e)
             banco_txt = (selected.banco or "-").strip() if selected else "-"
             cuenta_txt = (selected.cuenta or "-").strip() if selected else "-"
             clabe_txt = (selected.clabe or "-").strip() if selected else "-"
-            messages.success(
-                request,
-                f"Cuenta confirmada para pago. Beneficiario → Banco: {banco_txt} · Cuenta: {cuenta_txt} · CLABE: {clabe_txt}",
-            )
+            if transition_error:
+                messages.warning(
+                    request,
+                    f"Cuenta confirmada para pago. Beneficiario → Banco: {banco_txt} · Cuenta: {cuenta_txt} · CLABE: {clabe_txt}. Estado no se pudo mover automáticamente: {transition_error}",
+                )
+            else:
+                messages.success(
+                    request,
+                    f"Cuenta confirmada para pago. Beneficiario → Banco: {banco_txt} · Cuenta: {cuenta_txt} · CLABE: {clabe_txt}",
+                )
             return redirect(f"/compras/{compra.id}/flujo/?step=pago")
         elif form_name == "pago_pdf_discard":
             request.session.pop(f"pago_pdf_preview_{compra.id}", None)
@@ -1786,9 +1822,10 @@ def compra_flujo_view(request, compra_id):
                     messages.error(request, "No se puede registrar pago: falta PDF de factura en expediente.")
                     return redirect(f"/compras/{compra.id}/flujo/?step=pago")
 
-                pago_docs = list(compra.documentos.filter(etapa="pago").values("archivo", "descripcion"))
+                pago_docs = list(compra.documentos.filter(etapa="pago").values("archivo", "descripcion", "tipo_documento"))
                 has_caratula_bancaria = any(
-                    ("caratula" in ((d.get("descripcion") or "").lower().replace("á", "a")))
+                    (d.get("tipo_documento") == "CARATULA_BANCARIA")
+                    or ("caratula" in ((d.get("descripcion") or "").lower().replace("á", "a")))
                     or ("caratula" in str(d.get("archivo") or "").lower().replace("á", "a"))
                     for d in pago_docs
                 )
@@ -2050,7 +2087,7 @@ def compra_flujo_view(request, compra_id):
     last_microsip_snapshot = compra.debt_snapshots.filter(fuente="microsip").first()
     factura_docs = list(compra.documentos.filter(etapa="factura").values_list("archivo", flat=True))
     pago_docs_qs = compra.documentos.filter(etapa="pago").order_by("-created_at")
-    pago_doc_latest = pago_docs_qs.first()
+    pago_doc_latest = compra.documentos.filter(etapa="pago", tipo_documento="COMPROBANTE_PAGO").order_by("-created_at").first()
     has_pago_comprobante = bool(pago_doc_latest)
     solicitud_logs = list(compra.email_logs.order_by("-created_at")[:10])
 
