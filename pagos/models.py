@@ -577,6 +577,13 @@ class Compra(TimestampedModel):
         return base - self.total_monto_dividido
 
     @property
+    def monto_disponible_division_manual(self):
+        if self.es_division:
+            return Decimal("0")
+        base = self.compra_en_libras or Decimal("0")
+        return (base * self.porcentaje_disponible_division_manual) / Decimal("100")
+
+    @property
     def es_base_referencia_solo(self):
         if self.es_division:
             return False

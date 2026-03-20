@@ -135,11 +135,22 @@
                         {% endif %}
                     </td>
                     <td data-col="total" class="text-nowrap">{{ compra.compra_en_libras|money }}</td>
-                    <td data-col="pago" class="text-nowrap">{{ compra.base_pago|money }}</td>
-                    <td data-col="saldo" class="text-nowrap">{{ compra.saldo_por_pagar|money }}</td>
+                    <td data-col="pago" class="text-nowrap">
+                        {% if compra.base_pipeline_bloqueado_por_divisiones %}
+                        -
+                        {% else %}
+                        {{ compra.base_pago|money }}
+                        {% endif %}
+                    </td>
+                    <td data-col="saldo" class="text-nowrap">
+                        {% if compra.base_pipeline_bloqueado_por_divisiones %}
+                        -
+                        {% else %}
+                        {{ compra.saldo_por_pagar|money }}
+                        {% endif %}
+                    </td>
                     <td data-col="flujo">
                         <div><strong>{{ compra.flujo_label }}</strong></div>
-                        <small>{{ compra.flujo_progress }}%</small>
                         {% if compra.base_pipeline_bloqueado_por_divisiones %}
                         <div><span class="badge text-bg-secondary mt-1">CONTAINER</span></div>
                         {% else %}

@@ -870,17 +870,29 @@ class CompraDivisionCreateForm(BootstrapFormMixin, forms.Form):
 
         if not porcentaje and not monto:
             raise forms.ValidationError("Captura porcentaje o monto para dividir.")
-        if monto:
-            if base <= 0:
-                raise forms.ValidationError("La compra base no tiene monto para dividir.")
-            monto_disponible_manual = (base * self.compra.porcentaje_disponible_division_manual) / 100
-            if monto > monto_disponible_manual:
-                raise forms.ValidationError("El monto excede el disponible de la compra.")
-            porcentaje = (monto * 100) / base
+
+        monto_disponible_manual = (base * self.compra.porcentaje_disponible_division_manual) / 100
+
+        # Si ambos vienen capturados, usar el que sea válido (prioridad práctica: monto).
+        if porcentaje and monto:
+            pct_ok = porcentaje <= self.compra.porcentaje_disponible_division_manual
+            monto_ok = monto <= monto_disponible_manual
+            if monto_ok:
+                porcentaje = (monto * 100) / base
+            elif pct_ok:
+                monto = (base * porcentaje) / 100
+            else:
+                raise forms.ValidationError("La division excede el disponible de la compra.")
         elif porcentaje:
             if porcentaje > self.compra.porcentaje_disponible_division_manual:
                 raise forms.ValidationError("La division excede el disponible de la compra.")
             monto = (base * porcentaje) / 100
+        elif monto:
+            if base <= 0:
+                raise forms.ValidationError("La compra base no tiene monto para dividir.")
+            if monto > monto_disponible_manual:
+                raise forms.ValidationError("El monto excede el disponible de la compra.")
+            porcentaje = (monto * 100) / base
         cleaned["porcentaje_division"] = porcentaje
         cleaned["monto_division"] = monto
         return cleaned

@@ -666,9 +666,9 @@
                 <hr>
                 <h6>Crear division</h6>
                 <p class="small mb-1">Monto base en DLS: <strong>{{ compra.compra_en_libras|money4 }}</strong></p>
-                <p class="small mb-1">Dividido: <strong>{{ compra.total_porcentaje_dividido|floatformat:2 }}%</strong></p>
-                <p class="small mb-2">Disponible para dividir: <strong>{{ compra.porcentaje_disponible_division|floatformat:2 }}%</strong></p>
-                <p class="small mb-2">Monto disponible: <strong>{{ compra.monto_disponible_division|money4 }}</strong></p>
+                <p class="small mb-1">Dividido (manual): <strong>{{ compra.total_porcentaje_dividido_manual|floatformat:2 }}%</strong></p>
+                <p class="small mb-2">Disponible para dividir (manual): <strong>{{ compra.porcentaje_disponible_division_manual|floatformat:2 }}%</strong></p>
+                <p class="small mb-2">Monto disponible (manual): <strong>{{ compra.monto_disponible_division_manual|money4 }}</strong></p>
                 <form method="post" class="mb-3">
                     {% csrf_token %}
                     <input type="hidden" name="flow_form" value="dividir_crear">
@@ -1012,8 +1012,8 @@
 <script>
 (() => {
   const baseMonto = Number("{{ compra.compra_en_libras|default:0 }}");
-  const maxPct = Number("{{ compra.porcentaje_disponible_division|default:0 }}");
-  const maxMonto = Number("{{ compra.monto_disponible_division|default:0 }}");
+  const maxPct = Number("{{ compra.porcentaje_disponible_division_manual|default:0 }}");
+  const maxMonto = Number("{{ compra.monto_disponible_division_manual|default:0 }}");
   const pctInput = document.getElementById("id_div-porcentaje_division");
   const montoInput = document.getElementById("id_div-monto_division");
   const pctLabel = document.getElementById("pct-calculado");
@@ -1070,7 +1070,7 @@
       setError(montoInput, "El monto excede el disponible.");
     }
     const pctCalc = (monto * 100) / baseMonto;
-    pctInput.value = Number.isFinite(pctCalc) ? pctCalc.toFixed(4) : "";
+    pctInput.value = Number.isFinite(pctCalc) ? pctCalc.toFixed(2) : "";
     pctLabel.textContent = `${pctCalc.toFixed(4)}%`;
     applyLocks();
   }
