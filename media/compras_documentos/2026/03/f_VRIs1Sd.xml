@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cfdi:Comprobante xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" Moneda="USD" MetodoPago="PUE" Total="1000">
+  <cfdi:Emisor Rfc="AAA010101AAA" />
+  <cfdi:Receptor Rfc="UAM140522Q51" UsoCFDI="G01" />
+  <cfdi:Impuestos>
+    <cfdi:Traslados><cfdi:Traslado Impuesto="002" TasaOCuota="0.000000" /></cfdi:Traslados>
+  </cfdi:Impuestos>
+  <cfdi:Complemento><tfd:TimbreFiscalDigital UUID="uuid-ok" /></cfdi:Complemento>
+</cfdi:Comprobante>

@@ -44,36 +44,65 @@
     </div>
 </div>
 
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card card-metric border-warning-subtle">
+            <div class="card-body">
+                <p class="metric-label">Monto total pendiente de pago</p>
+                <h4 class="mb-0">{{ pending_total_usd|money }}</h4>
+                <small>USD · compras con saldo > 0</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card card-metric border-info-subtle">
+            <div class="card-body">
+                <p class="metric-label">Compras pendientes de pago</p>
+                <h4 class="mb-0">{{ pending_count }}</h4>
+                <small>Excluye bases contenedoras</small>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center">
         <strong>Aging de compras pendientes (SLA 15 días)</strong>
-        <span class="badge {% if sla_over_15 > 0 %}text-bg-danger{% else %}text-bg-success{% endif %}">Fuera SLA: {{ sla_over_15 }}</span>
+        <span class="badge {% if sla_over_15 > 0 %}text-bg-danger{% else %}text-bg-success{% endif %}">Vencidas: {{ sla_over_15 }}</span>
     </div>
     <div class="card-body">
         <div class="row g-2 text-center">
             <div class="col-6 col-md-3">
-                <div class="border rounded p-2">
-                    <div class="small text-muted">0-7 días</div>
-                    <div class="h5 mb-0">{{ aging|get_item:'0_7' }}</div>
-                </div>
+                <a class="text-decoration-none" href="/?aging=0_7">
+                    <div class="border rounded p-2 {% if active_aging_bucket == '0_7' %}bg-info-subtle border-info{% endif %}">
+                        <div class="small text-muted">0-7 días</div>
+                        <div class="h5 mb-0">{{ aging|get_item:'0_7' }}</div>
+                    </div>
+                </a>
             </div>
             <div class="col-6 col-md-3">
-                <div class="border rounded p-2">
-                    <div class="small text-muted">8-15 días</div>
-                    <div class="h5 mb-0">{{ aging|get_item:'8_15' }}</div>
-                </div>
+                <a class="text-decoration-none" href="/?aging=8_15">
+                    <div class="border rounded p-2 {% if active_aging_bucket == '8_15' %}bg-info-subtle border-info{% endif %}">
+                        <div class="small text-muted">8-15 días</div>
+                        <div class="h5 mb-0">{{ aging|get_item:'8_15' }}</div>
+                    </div>
+                </a>
             </div>
             <div class="col-6 col-md-3">
-                <div class="border border-warning rounded p-2 bg-warning-subtle">
-                    <div class="small text-muted">16-30 días</div>
-                    <div class="h5 mb-0">{{ aging|get_item:'16_30' }}</div>
-                </div>
+                <a class="text-decoration-none" href="/?aging=16_30">
+                    <div class="border border-warning rounded p-2 bg-warning-subtle {% if active_aging_bucket == '16_30' %}border-2{% endif %}">
+                        <div class="small text-muted">16-30 días</div>
+                        <div class="h5 mb-0">{{ aging|get_item:'16_30' }}</div>
+                    </div>
+                </a>
             </div>
             <div class="col-6 col-md-3">
-                <div class="border border-danger rounded p-2 bg-danger-subtle">
-                    <div class="small text-muted">30+ días</div>
-                    <div class="h5 mb-0">{{ aging|get_item:'31_plus' }}</div>
-                </div>
+                <a class="text-decoration-none" href="/?aging=31_plus">
+                    <div class="border border-danger rounded p-2 bg-danger-subtle {% if active_aging_bucket == '31_plus' %}border-2{% endif %}">
+                        <div class="small text-muted">30+ días</div>
+                        <div class="h5 mb-0">{{ aging|get_item:'31_plus' }}</div>
+                    </div>
+                </a>
             </div>
         </div>
     </div>
@@ -81,8 +110,9 @@
 
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">Compras recientes</h5>
+        <h5 class="mb-0">Compras SLA · {{ active_aging_label }}</h5>
         <div class="d-flex gap-2">
+            <a href="/?aging=all" class="btn btn-sm btn-outline-secondary">Ver todas</a>
             <a href="/queue/" class="btn btn-sm btn-outline-primary">Readiness queue</a>
             <a href="/import/compras/" class="btn btn-sm btn-outline-secondary">Importar compras</a>
             <a href="/registro/?form=compra" class="btn btn-sm btn-primary">Registrar compra</a>
@@ -93,6 +123,7 @@
             <thead>
                 <tr>
                     <th>Fecha LIQ</th>
+                    <th>Días</th>
                     <th>Compra</th>
                     <th>Productor</th>
                     <th>Total en DLS</th>
@@ -104,6 +135,7 @@
                 {% for compra in compras_recientes %}
                 <tr>
                     <td>{{ compra.fecha_liq }}</td>
+                    <td>{{ compra.aging_days }}</td>
                     <td>{{ compra.numero_compra }}</td>
                     <td>{{ compra.productor.nombre }}</td>
                     <td class="text-nowrap">{{ compra.compra_en_libras|money }}</td>
@@ -112,7 +144,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6" class="text-center py-4">No hay compras registradas.</td>
+                    <td colspan="7" class="text-center py-4">No hay compras registradas para este rango SLA.</td>
                 </tr>
                 {% endfor %}
             </tbody>

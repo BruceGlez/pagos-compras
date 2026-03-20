@@ -309,10 +309,38 @@ class HomeView(LoginRequiredMixin, ListView):
     template_name = "pagos/home.html"
     model = Compra
     context_object_name = "compras_recientes"
-    paginate_by = 10
+    paginate_by = None
+
+    def _actionable_pending(self):
+        return [
+            c for c in Compra.objects.select_related("productor").filter(cancelada=False).exclude(workflow_state=WorkflowStateChoices.PAID)
+            if not c.base_pipeline_bloqueado_por_divisiones
+        ]
+
+    def _bucket_for_days(self, days: int):
+        if days <= 7:
+            return "0_7"
+        if days <= 15:
+            return "8_15"
+        if days <= 30:
+            return "16_30"
+        return "31_plus"
 
     def get_queryset(self):
-        return Compra.objects.select_related("productor").filter(cancelada=False).order_by("-fecha_liq", "-id")
+        bucket = (self.request.GET.get("aging") or "16_30").strip()
+        today = timezone.localdate()
+        rows = []
+        for c in self._actionable_pending():
+            days = (today - c.fecha_liq).days if c.fecha_liq else 0
+            c.aging_days = days
+            c.aging_bucket = self._bucket_for_days(days)
+            if bucket in {"0_7", "8_15", "16_30", "31_plus"}:
+                if c.aging_bucket != bucket:
+                    continue
+            rows.append(c)
+
+        rows.sort(key=lambda x: ((x.fecha_liq or today), x.id))
+        return rows
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -325,8 +353,20 @@ class HomeView(LoginRequiredMixin, ListView):
         context["compras_count"] = compras_stats["conteo"] or 0
         context["tc_ultimo"] = TipoCambio.objects.order_by("-fecha").first()
 
+        pending_compras = self._actionable_pending()
+        pending_total = Decimal("0")
+        for c in pending_compras:
+            try:
+                saldo = Decimal(str(c.saldo_por_pagar or "0"))
+                if saldo > 0:
+                    pending_total += saldo
+            except Exception:
+                continue
+        context["pending_total_usd"] = pending_total
+        context["pending_count"] = len([c for c in pending_compras if (c.saldo_por_pagar or 0) > 0])
+
         today = timezone.localdate()
-        pending_qs = Compra.objects.filter(cancelada=False).exclude(workflow_state=WorkflowStateChoices.PAID).only("id", "fecha_liq")
+        pending_qs = pending_compras
         aging = {"0_7": 0, "8_15": 0, "16_30": 0, "31_plus": 0}
         for c in pending_qs:
             days = (today - c.fecha_liq).days if c.fecha_liq else 0
@@ -340,6 +380,15 @@ class HomeView(LoginRequiredMixin, ListView):
                 aging["31_plus"] += 1
         context["aging"] = aging
         context["sla_over_15"] = aging["16_30"] + aging["31_plus"]
+        context["active_aging_bucket"] = (self.request.GET.get("aging") or "16_30").strip()
+        bucket_labels = {
+            "0_7": "0-7 días",
+            "8_15": "8-15 días",
+            "16_30": "16-30 días",
+            "31_plus": "31+ días",
+            "all": "Todos",
+        }
+        context["active_aging_label"] = bucket_labels.get(context["active_aging_bucket"], "16-30 días")
         return context
 
 
