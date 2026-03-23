@@ -171,6 +171,7 @@ class EmailTemplateForm(BootstrapFormMixin, forms.ModelForm):
             "productor_nombre",
             "facturador_nombre",
             "productor_rfc",
+            "receptor_rfc",
             "compra_numero",
             "monto_compra",
             "subtotal_compra",
@@ -537,6 +538,12 @@ class CompraSolicitarFacturaForm(BootstrapFormMixin, forms.ModelForm):
         widget=forms.RadioSelect,
         initial="productor",
     )
+    productor_facturador = forms.ModelChoiceField(
+        required=False,
+        queryset=Productor.objects.none(),
+        label="O seleccionar desde catálogo de productores",
+        help_text="Úsalo cuando la entidad que factura ya existe como productor.",
+    )
 
     expected_moneda = forms.ChoiceField(
         required=False,
@@ -583,6 +590,8 @@ class CompraSolicitarFacturaForm(BootstrapFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["facturador"].queryset = PersonaFactura.objects.filter(activo=True).order_by("nombre")
         self.fields["facturador"].widget.attrs.update({"class": "form-select js-filterable-select"})
+        self.fields["productor_facturador"].queryset = Productor.objects.filter(activo=True).order_by("nombre")
+        self.fields["productor_facturador"].widget.attrs.update({"class": "form-select js-filterable-select"})
         if self.instance and self.instance.pk:
             self.initial["factura_source"] = "facturador" if self.instance.facturador_id else "productor"
 
@@ -614,11 +623,27 @@ class CompraSolicitarFacturaForm(BootstrapFormMixin, forms.ModelForm):
         cleaned = super().clean()
         source = (cleaned.get("factura_source") or "productor").strip()
         facturador = cleaned.get("facturador")
+        productor_facturador = cleaned.get("productor_facturador")
 
         if source == "facturador":
-            if not facturador:
+            if not facturador and not productor_facturador:
                 self.add_error("facturador", "Selecciona la entidad que factura.")
-            elif facturador.contador:
+
+            if not facturador and productor_facturador:
+                mapped, _ = PersonaFactura.objects.get_or_create(
+                    rfc=(productor_facturador.rfc or "").strip().upper(),
+                    defaults={
+                        "nombre": productor_facturador.nombre,
+                        "regimen_fiscal": productor_facturador.regimen_fiscal,
+                        "regimen_fiscal_codigo": productor_facturador.regimen_fiscal_codigo,
+                        "contador": productor_facturador.contador,
+                        "activo": True,
+                    },
+                )
+                facturador = mapped
+                cleaned["facturador"] = mapped
+
+            if facturador and facturador.contador:
                 cleaned["contador"] = facturador.contador.nombre
                 cleaned["correo"] = facturador.contador.email
         else:
@@ -839,7 +864,7 @@ class ImportAnticiposExcelForm(BootstrapFormMixin, forms.Form):
 
 class CompraDivisionCreateForm(BootstrapFormMixin, forms.Form):
     porcentaje_division = forms.DecimalField(
-        max_digits=6, decimal_places=2, min_value=0.01, required=False
+        max_digits=8, decimal_places=4, min_value=0.0001, required=False
     )
     monto_division = forms.DecimalField(
         max_digits=16, decimal_places=4, min_value=0.0001, required=False
@@ -857,6 +882,7 @@ class CompraDivisionCreateForm(BootstrapFormMixin, forms.Form):
         self.fields["porcentaje_division"].widget.attrs["max"] = str(
             self.compra.porcentaje_disponible_division_manual
         )
+        self.fields["porcentaje_division"].widget.attrs["step"] = "0.0001"
         base = self.compra.compra_en_libras or 0
         self.fields["monto_division"].widget.attrs["max"] = str(
             (base * self.compra.porcentaje_disponible_division_manual / 100) if base else 0

@@ -338,7 +338,7 @@ class Compra(TimestampedModel):
         blank=True,
     )
     porcentaje_division = models.DecimalField(
-        max_digits=6, decimal_places=2, null=True, blank=True
+        max_digits=8, decimal_places=4, null=True, blank=True
     )
     uuid_factura = models.CharField(max_length=80, blank=True)
     factura = models.CharField(max_length=200, blank=True)
@@ -485,10 +485,13 @@ class Compra(TimestampedModel):
         if self.tipo_cambio_id:
             self.tipo_cambio_valor = self.tipo_cambio.tc
         elif self.fecha_liq:
-            tc = TipoCambio.objects.filter(fecha=self.fecha_liq).first()
-            if tc:
-                self.tipo_cambio = tc
-                self.tipo_cambio_valor = tc.tc
+            # Solo autocompletar desde TC diario cuando no hay TC pactado/manual capturado.
+            tc_val_actual = Decimal(str(self.tipo_cambio_valor or "0"))
+            if tc_val_actual <= 0:
+                tc = TipoCambio.objects.filter(fecha=self.fecha_liq).first()
+                if tc:
+                    self.tipo_cambio = tc
+                    self.tipo_cambio_valor = tc.tc
         if self.fecha_de_pago and self.fecha_liq:
             self.dias_transcurridos = (self.fecha_de_pago - self.fecha_liq).days
         tc_val = Decimal(str(self.tipo_cambio_valor or "0"))
@@ -521,7 +524,10 @@ class Compra(TimestampedModel):
                 )["total"]
                 or Decimal("0")
             )
-            if siblings_total + self.porcentaje_division > Decimal("100"):
+            total_pct = (Decimal(str(siblings_total or "0")) + Decimal(str(self.porcentaje_division or "0"))).quantize(
+                Decimal("0.0001"), rounding=ROUND_HALF_UP
+            )
+            if total_pct > Decimal("100.0000"):
                 raise ValidationError("La suma de divisiones no puede exceder 100%.")
         elif self.porcentaje_division:
             raise ValidationError(
@@ -550,11 +556,21 @@ class Compra(TimestampedModel):
         return value or Decimal("0")
 
     @property
+    def total_monto_dividido_manual(self):
+        if self.es_division:
+            return Decimal("0")
+        value = self.divisiones.exclude(factura="__REMAINDER__").aggregate(total=Sum("compra_en_libras"))["total"]
+        return value or Decimal("0")
+
+    @property
     def total_porcentaje_dividido_manual(self):
         if self.es_division:
             return Decimal("0")
-        value = self.divisiones.exclude(factura="__REMAINDER__").aggregate(total=Sum("porcentaje_division"))["total"]
-        return value or Decimal("0")
+        base = self.compra_en_libras or Decimal("0")
+        if base <= 0:
+            return Decimal("0")
+        pct = (self.total_monto_dividido_manual * Decimal("100")) / base
+        return pct.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
 
     @property
     def porcentaje_disponible_division(self):
@@ -562,7 +578,14 @@ class Compra(TimestampedModel):
 
     @property
     def porcentaje_disponible_division_manual(self):
-        return Decimal("100") - self.total_porcentaje_dividido_manual
+        base = self.compra_en_libras or Decimal("0")
+        if base <= 0:
+            return Decimal("0")
+        remaining_monto = base - self.total_monto_dividido_manual
+        if remaining_monto <= 0:
+            return Decimal("0")
+        pct = (remaining_monto * Decimal("100")) / base
+        return pct.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
 
     @property
     def total_monto_dividido(self):

@@ -160,6 +160,7 @@
                                     + Crear nuevo facturador
                                 </button>
                             </p>
+                            <p>{{ active_form.productor_facturador.label_tag }} {{ active_form.productor_facturador }}</p>
                             </div>
                             <p>{{ active_form.expected_moneda.label_tag }} {{ active_form.expected_moneda }}</p>
                             <p>{{ active_form.expected_forma_pago.label_tag }} {{ active_form.expected_forma_pago }}</p>
@@ -1070,7 +1071,7 @@
       setError(montoInput, "El monto excede el disponible.");
     }
     const pctCalc = (monto * 100) / baseMonto;
-    pctInput.value = Number.isFinite(pctCalc) ? pctCalc.toFixed(2) : "";
+    pctInput.value = Number.isFinite(pctCalc) ? pctCalc.toFixed(4) : "";
     pctLabel.textContent = `${pctCalc.toFixed(4)}%`;
     applyLocks();
   }

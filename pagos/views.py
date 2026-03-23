@@ -104,10 +104,19 @@ def _split_email_list(raw: str):
 
 def _invoice_recipients_for_compra(compra: Compra):
     recipients = []
+    # Explicit override/field on compra always respected first.
     if (compra.correo or "").strip():
         recipients.extend(_split_email_list(compra.correo))
 
-    contador = getattr(compra.productor, "contador", None)
+    # Counterparty source depends on invoice source selection.
+    # - If facturador selected: use facturador.contador
+    # - Else: use productor.contador
+    contador = None
+    if compra.facturador_id:
+        contador = getattr(compra.facturador, "contador", None)
+    if not contador:
+        contador = getattr(compra.productor, "contador", None)
+
     if contador:
         recipients.extend(_split_email_list(contador.email or ""))
         recipients.extend(_split_email_list(getattr(contador, "emails_adicionales", "") or ""))
@@ -1893,12 +1902,17 @@ def compra_flujo_view(request, compra_id):
                 )
                 child.save()
 
-                # Auto-manage remainder leg: BASE-R while total division < 100%.
-                remaining_pct = compra.porcentaje_disponible_division
+                # Auto-manage remainder leg: BASE-R while there is meaningful remainder.
+                remaining_pct = compra.porcentaje_disponible_division_manual
+                rem_monto = compra.monto_disponible_division_manual
                 remainder = compra.divisiones.filter(factura="__REMAINDER__").first()
-                if remaining_pct > Decimal("0"):
+
+                min_remainder_pct = Decimal("0.0001")
+                min_remainder_monto = Decimal("1.0000")
+                has_meaningful_remainder = (remaining_pct >= min_remainder_pct) and (rem_monto >= min_remainder_monto)
+
+                if has_meaningful_remainder:
                     rem_pacas = (compra.pacas or 0) * remaining_pct / Decimal("100")
-                    rem_monto = (compra.compra_en_libras or 0) * remaining_pct / Decimal("100")
                     if remainder:
                         remainder.porcentaje_division = remaining_pct
                         remainder.pacas = rem_pacas

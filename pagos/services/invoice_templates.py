@@ -17,9 +17,14 @@ def _ctx(compra):
     factura_nombre = "" if (compra.factura or "").strip() == "__REMAINDER__" else (compra.factura or "")
     nombre_factura = facturador.nombre if facturador else (factura_nombre or productor.nombre)
     cfg = XmlValidationConfig.get_default()
-    rfc_factura = (
+    rfc_receptor = (
         (compra.expected_rfc_receptor or "").strip().upper()
         or ((cfg.global_rfc_receptor or "").strip().upper() or "UAM140522Q51")
+    )
+    rfc_emisor = (
+        ((facturador.rfc if facturador else "") or "").strip().upper()
+        or ((productor.rfc or "").strip().upper())
+        or rfc_receptor
     )
     expected_moneda = (compra.expected_moneda or ("USD" if compra.moneda == "DOLARES" else "MXN")).strip().upper()
     tc = Decimal(str(compra.tipo_cambio_valor or 0))
@@ -36,7 +41,8 @@ def _ctx(compra):
     return {
         "productor_nombre": productor.nombre,
         "facturador_nombre": nombre_factura,
-        "productor_rfc": rfc_factura,
+        "productor_rfc": rfc_emisor,
+        "receptor_rfc": rfc_receptor,
         "compra_numero": compra.numero_compra,
         "monto_compra": f"{subtotal:,.2f}",
         "subtotal_compra": f"{subtotal:,.2f}",

@@ -15,6 +15,7 @@ from .models import (
     DocumentoCompra,
     EmailTemplate,
     InvoiceValidationResult,
+    PersonaFactura,
     MonedaChoices,
     PagoCompra,
     Productor,
@@ -439,6 +440,36 @@ class InvoiceTemplateSelectionTests(TestCase):
         })
         self.assertFalse(form.is_valid())
         self.assertIn("foo", str(form.errors))
+
+    def test_resico_template_usa_rfc_emisor_y_receptor_separado(self):
+        productor = Productor.objects.create(codigo="P004", nombre="Prod", rfc="PROD010101AAA")
+        facturador = PersonaFactura.objects.create(nombre="EVA", rfc="REUE950812MH3", regimen_fiscal="626 RESICO")
+        tc = TipoCambio.objects.create(fecha=timezone.now().date(), tc=17.2500)
+        compra = Compra.objects.create(
+            numero_compra=301,
+            productor=productor,
+            facturador=facturador,
+            expected_rfc_receptor="UAM140522Q51",
+            fecha_de_pago=timezone.now().date(),
+            fecha_liq=timezone.now().date(),
+            compra_en_libras=1000,
+            tipo_cambio=tc,
+        )
+
+        EmailTemplate.objects.create(
+            code="RESICO_RFC",
+            nombre="RESICO RFC",
+            scenario="RESICO",
+            subject_template="RFC {productor_rfc}",
+            body_template="Emisor {productor_rfc} Receptor {receptor_rfc}",
+            is_default=True,
+            activo=True,
+        )
+
+        payload = build_invoice_request_email(compra)
+        self.assertIn("REUE950812MH3", payload["subject"])
+        self.assertIn("Emisor REUE950812MH3", payload["body"])
+        self.assertIn("Receptor UAM140522Q51", payload["body"])
 
 
 class ResicoPolicyValidationTests(TestCase):

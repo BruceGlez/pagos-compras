@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<cfdi:Comprobante xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd" Version="4.0" Fecha="2026-03-23T11:28:53" Sello="T8EA9Ez4Qby2WHSvYYMIRCk7+W8DW/7mgS06edZMtJG78hzDzrR1qT0+eM5KMW5L8DT1nxJhF5L0AHg3WtBAuf0+OomoByEy1P2ZTIpU5Db7u3ye07pVusbe5Vc/Jn3S8PUp+uRszLioREXO4v1ywCekh0prKK8HSy9oyYjY1/Eaxt/4oGenAaYRuGgovGUCkR2yhIGf45k97UhkuNh/bxXTYZtbcgpvzkRyBcsXlhDu9e1jPExfQeAprQc2y8xvKEzUxqcLtvanQChjLuouGhHb9IXJdkR5NdiXPaGId8EBqVVMFevA7IHsJe2sv2yYIfbK9dYSlnuHSeIf4SiNBQ==" FormaPago="03" NoCertificado="00001000000516114676" Certificado="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" SubTotal="540776.83" Descuento="6776.88" Moneda="MXN" Total="533999.95" TipoDeComprobante="I" Exportacion="01" MetodoPago="PUE" LugarExpedicion="32813" xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <cfdi:Emisor Rfc="REUE950812MH3" Nombre="EVA REMPEL UNGER" RegimenFiscal="626" />
+  <cfdi:Receptor Rfc="UAM140522Q51" Nombre="UNION ALGODONERA MOCTEZUMA" DomicilioFiscalReceptor="32840" RegimenFiscalReceptor="601" UsoCFDI="G01" />
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="11151507" NoIdentificacion="ALGODON" Cantidad="39977.6083" ClaveUnidad="LBR" Unidad="Libra" Descripcion="ALGODON (CLASE SM 82.29 PACAS 18133.56 KG) &quot;Los ingresos que ampara este comprobante se encuentran en el supuesto de excencón a que se refiere el articulo 113-Enoveno párrafo de la Ley de ISR&quot;" ValorUnitario="11.2763" Importe="450799.504473" Descuento="6776.88" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="444022.624473" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="11151507" NoIdentificacion="ALGODON" Cantidad="6153.0851" ClaveUnidad="LBR" Unidad="Libra" Descripcion="ALGODON (CLASE MP 12.66 PACAS 2791.00 KG) &quot;Los ingresos que ampara este comprobante se encuentran en el supuesto de excencón a que se refiere el articulo 113-Enoveno párrafo de la Ley de ISR&quot;" ValorUnitario="11.0983" Importe="68288.784365" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="68288.784365" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="11151507" NoIdentificacion="ALGODON" Cantidad="1986.0760" ClaveUnidad="LBR" Unidad="Libra" Descripcion="ALGODON (CLASE M 3.96 PACAS 900.87 KG) &quot;Los ingresos que ampara este comprobante se encuentran en el supuesto de excencón a que se refiere el articulo 113-Enoveno párrafo de la Ley de ISR&quot; COMPRA 135" ValorUnitario="10.9203" Importe="21688.545743" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="21688.545743" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+  </cfdi:Conceptos>
+  <cfdi:Impuestos TotalImpuestosTrasladados="0.00">
+    <cfdi:Traslados>
+      <cfdi:Traslado Base="533999.95" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00" />
+    </cfdi:Traslados>
+  </cfdi:Impuestos>
+  <cfdi:Complemento>
+    <tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" xsi:schemaLocation="http://www.sat.gob.mx/TimbreFiscalDigital http://www.sat.gob.mx/sitio_internet/cfd/TimbreFiscalDigital/TimbreFiscalDigitalv11.xsd" Version="1.1" UUID="FCACB433-3716-4D3F-8F87-6CEC1ED6B827" FechaTimbrado="2026-03-23T11:29:44" RfcProvCertif="SAT970701NN3" SelloCFD="T8EA9Ez4Qby2WHSvYYMIRCk7+W8DW/7mgS06edZMtJG78hzDzrR1qT0+eM5KMW5L8DT1nxJhF5L0AHg3WtBAuf0+OomoByEy1P2ZTIpU5Db7u3ye07pVusbe5Vc/Jn3S8PUp+uRszLioREXO4v1ywCekh0prKK8HSy9oyYjY1/Eaxt/4oGenAaYRuGgovGUCkR2yhIGf45k97UhkuNh/bxXTYZtbcgpvzkRyBcsXlhDu9e1jPExfQeAprQc2y8xvKEzUxqcLtvanQChjLuouGhHb9IXJdkR5NdiXPaGId8EBqVVMFevA7IHsJe2sv2yYIfbK9dYSlnuHSeIf4SiNBQ==" NoCertificadoSAT="00001000000705250068" SelloSAT="TwLQIHBpqGwsI2Za8hlx1ec9/yuXLQIM2gjb/DVD8vZ8x3mZ44ac5cdOyR5MxSss0lR6x2/5bdy4b/TJSLe78VWNg8jccuz0hzke9WxU8cTNqQvGmXj006MhiqMaJ61uL+fYOCfkw/T4GsQtIMnI9eCvmITO0gAv4/Ptcf4HlkJ0zQEazM7pwz7V+82P+DSl82D8grZLxaxJnFTJrCX4M4sXM7cXf2bw7dFlxCZ4KlMJFkdb5UCp+ltPdesMtAJSMCEyJry4TkLUUlrQrq7/KhhelrRn9W/ZeDkUtsYlzJeQATUKLN/zFNjK4N9aV8rdadMBBEPjMxMdFpy64+gT2g==" />
+  </cfdi:Complemento>
+</cfdi:Comprobante>
