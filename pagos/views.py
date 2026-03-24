@@ -520,57 +520,57 @@ def _queue_blockers_for_compra(c: Compra):
 
 @login_required
 def readiness_queue_view(request):
-    qs = Compra.objects.select_related("productor", "parent_compra").filter(cancelada=False).order_by("fecha_liq", "id")
-    state = (request.GET.get("state") or "").strip()
+    state = (request.GET.get("state") or "").strip().upper()
+
+    def _queue_state(c: Compra):
+        ws = c.workflow_state
+        if ws == WorkflowStateChoices.WAITING_INVOICE:
+            return "SOLICITUD_ENVIADA" if c.solicitud_factura_enviada else "SOLICITUD_PENDIENTE"
+        if ws in {WorkflowStateChoices.INVOICE_BLOCKED, WorkflowStateChoices.INVOICE_VALID}:
+            return "SOLICITUD_ENVIADA"
+        if ws == WorkflowStateChoices.WAITING_BANK_CONFIRMATION:
+            return "WAITING_BANK_CONFIRMATION"
+        if ws == WorkflowStateChoices.READY_TO_PAY:
+            return "READY_TO_PAY"
+        if ws == WorkflowStateChoices.PAID:
+            return "PAID"
+        return "OTHER"
+
+    base_q = Compra.objects.select_related("productor", "parent_compra").filter(cancelada=False).order_by("fecha_liq", "id")
+    visible_all = [c for c in list(base_q[:500]) if not c.base_pipeline_bloqueado_por_divisiones]
+
+    default_states = {"SOLICITUD_PENDIENTE", "SOLICITUD_ENVIADA", "WAITING_BANK_CONFIRMATION", "READY_TO_PAY", "PAID"}
     if state:
-        qs = qs.filter(workflow_state=state)
+        queue_items = [c for c in visible_all if _queue_state(c) == state]
     else:
-        qs = qs.filter(
-            workflow_state__in=[
-                WorkflowStateChoices.WAITING_INVOICE,
-                WorkflowStateChoices.INVOICE_BLOCKED,
-                WorkflowStateChoices.INVOICE_VALID,
-                WorkflowStateChoices.WAITING_BANK_CONFIRMATION,
-                WorkflowStateChoices.READY_TO_PAY,
-                WorkflowStateChoices.PAID,
-            ]
-        )
+        queue_items = [c for c in visible_all if _queue_state(c) in default_states]
 
-    base_q = Compra.objects.select_related("productor", "parent_compra").filter(cancelada=False)
-    visible_all = [c for c in base_q if not c.base_pipeline_bloqueado_por_divisiones]
     counts = {
-        "WAITING_INVOICE": sum(1 for c in visible_all if c.workflow_state == WorkflowStateChoices.WAITING_INVOICE),
-        "INVOICE_BLOCKED": sum(1 for c in visible_all if c.workflow_state == WorkflowStateChoices.INVOICE_BLOCKED),
-        "INVOICE_VALID": sum(1 for c in visible_all if c.workflow_state == WorkflowStateChoices.INVOICE_VALID),
-        "WAITING_BANK_CONFIRMATION": sum(1 for c in visible_all if c.workflow_state == WorkflowStateChoices.WAITING_BANK_CONFIRMATION),
-        "READY_TO_PAY": sum(1 for c in visible_all if c.workflow_state == WorkflowStateChoices.READY_TO_PAY),
-        "PAID": sum(1 for c in visible_all if c.workflow_state == WorkflowStateChoices.PAID),
+        "SOLICITUD_PENDIENTE": sum(1 for c in visible_all if _queue_state(c) == "SOLICITUD_PENDIENTE"),
+        "SOLICITUD_ENVIADA": sum(1 for c in visible_all if _queue_state(c) == "SOLICITUD_ENVIADA"),
+        "WAITING_BANK_CONFIRMATION": sum(1 for c in visible_all if _queue_state(c) == "WAITING_BANK_CONFIRMATION"),
+        "READY_TO_PAY": sum(1 for c in visible_all if _queue_state(c) == "READY_TO_PAY"),
+        "PAID": sum(1 for c in visible_all if _queue_state(c) == "PAID"),
     }
-
-    queue_items = [c for c in list(qs[:300]) if not c.base_pipeline_bloqueado_por_divisiones]
 
     priority_scores = {}
     for c in queue_items:
         score = Decimal("0")
-        # Base by state urgency
-        if c.workflow_state == WorkflowStateChoices.READY_TO_PAY:
+        qstate = _queue_state(c)
+        if qstate == "READY_TO_PAY":
             score += Decimal("100")
-        elif c.workflow_state == WorkflowStateChoices.WAITING_BANK_CONFIRMATION:
+        elif qstate == "WAITING_BANK_CONFIRMATION":
             score += Decimal("70")
-        elif c.workflow_state == WorkflowStateChoices.INVOICE_VALID:
-            score += Decimal("60")
-        elif c.workflow_state == WorkflowStateChoices.INVOICE_BLOCKED:
+        elif qstate == "SOLICITUD_ENVIADA":
             score += Decimal("40")
-        elif c.workflow_state == WorkflowStateChoices.WAITING_INVOICE:
+        elif qstate == "SOLICITUD_PENDIENTE":
             score += Decimal("20")
 
-        # Older liquidation date => higher priority
         if c.fecha_liq:
             days = (timezone.localdate() - c.fecha_liq).days
             if days > 0:
                 score += Decimal(str(min(days, 30)))
 
-        # Higher payable saldo => slightly higher priority
         try:
             saldo = Decimal(str(c.saldo_por_pagar or "0"))
             if saldo > 0:
@@ -584,8 +584,10 @@ def readiness_queue_view(request):
         c.id: (c.invoice_validations.first().blocked_reason if c.invoice_validations.first() else "")
         for c in queue_items
     }
-
     queue_blockers = {c.id: _queue_blockers_for_compra(c) for c in queue_items}
+
+    for c in queue_items:
+        c.queue_state = _queue_state(c)
 
     queue_items.sort(key=lambda x: (priority_scores.get(x.id, Decimal("0")), x.fecha_liq or timezone.localdate()), reverse=True)
 

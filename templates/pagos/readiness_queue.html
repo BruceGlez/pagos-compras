@@ -1,20 +1,19 @@
 {% extends "base.html" %}
 {% load pagos_extras %}
-{% block title %}Payment Readiness Queue{% endblock %}
+{% block title %}Queue de preparación de pagos{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h5 class="mb-0">Payment Readiness Queue</h5>
+  <h5 class="mb-0">Queue de preparación de pagos</h5>
   <a class="btn btn-outline-secondary btn-sm" href="/compras/">Ver compras operativas</a>
 </div>
 
 <div class="row g-2 mb-3">
-  <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=WAITING_INVOICE"><strong>{{ counts.WAITING_INVOICE }}</strong><small>Waiting invoice</small></a></div>
-  <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=INVOICE_BLOCKED"><strong>{{ counts.INVOICE_BLOCKED }}</strong><small>Invoice blocked</small></a></div>
-  <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=INVOICE_VALID"><strong>{{ counts.INVOICE_VALID }}</strong><small>Invoice valid</small></a></div>
-  <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=WAITING_BANK_CONFIRMATION"><strong>{{ counts.WAITING_BANK_CONFIRMATION }}</strong><small>Waiting bank confirmation</small></a></div>
-  <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=READY_TO_PAY"><strong>{{ counts.READY_TO_PAY }}</strong><small>Ready to pay</small></a></div>
-  <div class="col-md-1"><a class="card card-body text-decoration-none" href="/queue/?state=PAID"><strong>{{ counts.PAID }}</strong><small>Paid</small></a></div>
-  <div class="col-md-1"><a class="card card-body text-decoration-none" href="/queue/"><strong>All</strong><small>Queue</small></a></div>
+  <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=SOLICITUD_PENDIENTE"><strong>{{ counts.SOLICITUD_PENDIENTE }}</strong><small>Solicitud pendiente</small></a></div>
+  <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=SOLICITUD_ENVIADA"><strong>{{ counts.SOLICITUD_ENVIADA }}</strong><small>Solicitud enviada</small></a></div>
+  <div class="col-md-3"><a class="card card-body text-decoration-none" href="/queue/?state=WAITING_BANK_CONFIRMATION"><strong>{{ counts.WAITING_BANK_CONFIRMATION }}</strong><small>Cuenta bancaria pendiente</small></a></div>
+  <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=READY_TO_PAY"><strong>{{ counts.READY_TO_PAY }}</strong><small>Compra lista para pago</small></a></div>
+  <div class="col-md-2"><a class="card card-body text-decoration-none" href="/queue/?state=PAID"><strong>{{ counts.PAID }}</strong><small>Compras pagadas</small></a></div>
+  <div class="col-md-1"><a class="card card-body text-decoration-none" href="/queue/"><strong>Todas</strong><small>Todas</small></a></div>
 </div>
 
 <div class="card">
@@ -25,8 +24,8 @@
           <th>Compra</th>
           <th>Fecha LIQ</th>
           <th>Productor</th>
-          <th>State</th>
-          <th>Total DLS</th>
+          <th>Estado</th>
+          <th>Total USD</th>
           <th>Saldo</th>
           <th>Prioridad</th>
           <th>Acción</th>
@@ -44,8 +43,8 @@
           <td>{{ compra.fecha_liq }}</td>
           <td>{{ compra.productor.nombre }}</td>
           <td>
-            <span class="badge text-bg-info">{{ compra.workflow_state }}</span>
-            {% if compra.workflow_state == 'INVOICE_BLOCKED' and blocked_reasons|get_item:compra.id %}
+            <span class="badge text-bg-info">{{ compra.queue_state|default:compra.workflow_state }}</span>
+            {% if blocked_reasons|get_item:compra.id %}
             <div class="small text-danger mt-1">{{ blocked_reasons|get_item:compra.id }}</div>
             {% endif %}
             {% if queue_blockers|get_item:compra.id %}
@@ -64,7 +63,7 @@
           </td>
         </tr>
       {% empty %}
-        <tr><td colspan="8" class="text-center py-4">Sin compras en esta categoria.</td></tr>
+        <tr><td colspan="8" class="text-center py-4">Sin compras en esta categoría.</td></tr>
       {% endfor %}
       </tbody>
     </table>

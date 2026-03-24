@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cfdi:Comprobante xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd" xmlns:cfdi="http://www.sat.gob.mx/cfd/4" Version="4.0" Folio="122" Fecha="2026-03-24T07:37:12" Sello="b5GtqE+LDxKRryto31qAlOQoTfw6F9WuNK4cetDYJkvI+8izH5JPd3wrBgvnN92Z9nXaiZdFhcycPvU5SElMXlps+iyrnBRbPgtttx2L5tTWD5e0jBVMsZ5B4Gwyaa5CW8EUyP/ANY+GIlLFt6J/hcCvPhkwnceGnbiosTvqdLeN9lUtIuxkLVqeGegL/yTM/jqLs2UyexupAAt+ljRjLNg4qlmsLa2fQql2upVXG8DJXMTkWC7LNCFD5tfYM66WhisA95HMeh2yK96k2Xly/sObQjnrt3adKo8x7daGdyX+4/HlDeq+B8Fl94lRE3yRpiomVrAIL1SADUICckr2+w==" FormaPago="03" NoCertificado="00001000000705094862" Certificado="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" CondicionesDePago="CONTADO" SubTotal="226061.22" Descuento="108.41" Moneda="USD" TipoCambio="17.8998" Total="225952.81" TipoDeComprobante="I" Exportacion="01" MetodoPago="PUE" LugarExpedicion="31520">
+	<cfdi:Emisor Rfc="FOLJ890120UVA" Nombre="JACOB FROESSE LOEWEN" RegimenFiscal="612"/>
+	<cfdi:Receptor Rfc="UAM140522Q51" Nombre="UNION ALGODONERA MOCTEZUMA" DomicilioFiscalReceptor="32840" RegimenFiscalReceptor="601" UsoCFDI="G01"/>
+	<cfdi:Conceptos>
+		<cfdi:Concepto ClaveProdServ="11151507" Cantidad="94613.58" ClaveUnidad="LBR" Unidad="LIBRAS" Descripcion="FIBRA DE ALGODON&#xA;SM 194.55 PACAS 49,916.05 KILOS" ValorUnitario="0.6345" Importe="60032.32" Descuento="28.79" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="60003.53" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="11151507" Cantidad="29593.74" ClaveUnidad="LBR" Unidad="LIBRAS" Descripcion="FIBRA DE ALGODON&#xA;MP 59.90 PACAS 13,423.51 KILOS" ValorUnitario="0.6245" Importe="18481.29" Descuento="8.86" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="18472.43" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="11151507" Cantidad="160387.91" ClaveUnidad="LBR" Unidad="LIBRAS" Descripcion="FIBRA DE ALGODON&#xA;M 328.13 PACAS 72,750.82 KILOS" ValorUnitario="0.6145" Importe="98558.37" Descuento="47.26" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="98511.11" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="11151507" Cantidad="38562.81" ClaveUnidad="LBR" Unidad="LIBRAS" Descripcion="FIBRA DE ALGODON&#xA;SLMP 77.39 PACAS 17,491.82 KILOS" ValorUnitario="0.5945" Importe="22925.59" Descuento="10.99" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="22914.60" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="11151507" Cantidad="34997.2" ClaveUnidad="LBR" Unidad="LIBRAS" Descripcion="FIBRA DE ALGODON&#xA;SLM 69.44 PACAS 15,874.48 KILOS" ValorUnitario="0.5745" Importe="20105.89" Descuento="9.64" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="20096.25" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="11151507" Cantidad="8646.28" ClaveUnidad="LBR" Unidad="LIBRAS" Descripcion="FIBRA DE ALGODON&#xA;LMP 16.96 PACAS 3,921.89 8,646.28 KILOS" ValorUnitario="0.5445" Importe="4707.90" Descuento="2.26" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="4705.64" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="11151507" Cantidad="2177.93" ClaveUnidad="LBR" Unidad="LIBRAS" Descripcion="FIBRA DE ALGODON&#xA;LM 4.24 PACAS 987.89 KILOS" ValorUnitario="0.5145" Importe="1120.54" Descuento="0.54" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="1120.00" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+		<cfdi:Concepto ClaveProdServ="11151507" Cantidad="272.53" ClaveUnidad="LBR" Unidad="LIBRAS" Descripcion="FIBRA DE ALGODON&#xA;SGO .053 PACAS 123.62 KILOS&#xA;COMPRA 00136&#xA;&#xA;PRECIO HUESO KILO            -5.04  USD&#xA;&#xA;TOTAL HUESO                   1,459,528  LBS&#xA;TOTAL PLUMA                                      LBS  25%&#xA;TOTAL SEMILLA                    583,811  LBS  40 %&#xA;TOTAL MERMA                      510,835  LBS  35 %&#xA;                                                           _____________&#xA;                                                                   100 %" ValorUnitario="0.4745" Importe="129.32" Descuento="0.07" ObjetoImp="02">
+			<cfdi:Impuestos>
+				<cfdi:Traslados>
+					<cfdi:Traslado Base="129.25" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00"/>
+				</cfdi:Traslados>
+			</cfdi:Impuestos>
+		</cfdi:Concepto>
+	</cfdi:Conceptos>
+	<cfdi:Impuestos TotalImpuestosTrasladados="0.00">
+		<cfdi:Traslados>
+			<cfdi:Traslado Base="225952.81" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00"/>
+		</cfdi:Traslados>
+	</cfdi:Impuestos>
+	<cfdi:Complemento><tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" xsi:schemaLocation="http://www.sat.gob.mx/TimbreFiscalDigital http://www.sat.gob.mx/sitio_internet/cfd/TimbreFiscalDigital/TimbreFiscalDigitalv11.xsd" SelloSAT="Y2O1X+0oFxNNUItvTWK1Vg6JzGuRI+3JqTZjYGEx4Ki1P0IabcNdf5ZmW6hEL1lI3j4kjAhjqXgrptdtnkBARR2eAaP5IPbavOvx0eHEAOpzOdLtCCX3Thjlk72Lz6i3UWDA/98G3FGqRSwBdTnqOn9ivK2lGUKFkQg6x60Q6jwbUdEOQWz+eUKyIFj09M6LBQ8f44IBofL1iwXpC1HHbdnXod8D1ykwtdhg0gQPqA+E+HYZsax0jzOb8Nxu2K3gYU+8IwKWakPhr0W2dB08xlE9DIThyzLjdfNOON8fVkXPCfyZuJ0uC68i7gB6i8H+1AkWFWuynPMoMRqhN6ZLWA==" NoCertificadoSAT="00001000000702501858" SelloCFD="b5GtqE+LDxKRryto31qAlOQoTfw6F9WuNK4cetDYJkvI+8izH5JPd3wrBgvnN92Z9nXaiZdFhcycPvU5SElMXlps+iyrnBRbPgtttx2L5tTWD5e0jBVMsZ5B4Gwyaa5CW8EUyP/ANY+GIlLFt6J/hcCvPhkwnceGnbiosTvqdLeN9lUtIuxkLVqeGegL/yTM/jqLs2UyexupAAt+ljRjLNg4qlmsLa2fQql2upVXG8DJXMTkWC7LNCFD5tfYM66WhisA95HMeh2yK96k2Xly/sObQjnrt3adKo8x7daGdyX+4/HlDeq+B8Fl94lRE3yRpiomVrAIL1SADUICckr2+w==" RfcProvCertif="SCD110105654" FechaTimbrado="2026-03-24T08:49:56" UUID="C7694A00-34DB-1C49-9BA9-27B6D5B9EEE6" Version="1.1"/></cfdi:Complemento></cfdi:Comprobante>

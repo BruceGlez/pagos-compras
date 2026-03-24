@@ -32,6 +32,32 @@ from .models import (
 )
 
 
+def _sync_facturador_cuentas_from_productor(productor: Productor, facturador: PersonaFactura):
+    if not productor or not facturador:
+        return 0
+    created = 0
+    for acc in ProductorCuentaBancaria.objects.filter(productor=productor):
+        exists = FacturadorCuentaBancaria.objects.filter(
+            facturador=facturador,
+            cuenta=acc.cuenta,
+            clabe=acc.clabe,
+        ).exists()
+        if exists:
+            continue
+        FacturadorCuentaBancaria.objects.create(
+            facturador=facturador,
+            banco=acc.banco,
+            titular=acc.titular,
+            cuenta=acc.cuenta,
+            clabe=acc.clabe,
+            caratula_archivo=acc.caratula_archivo,
+            activa=acc.activa,
+            predeterminada=acc.predeterminada,
+        )
+        created += 1
+    return created
+
+
 class DateInput(forms.DateInput):
     input_type = "date"
 
@@ -630,7 +656,7 @@ class CompraSolicitarFacturaForm(BootstrapFormMixin, forms.ModelForm):
                 self.add_error("facturador", "Selecciona la entidad que factura.")
 
             if not facturador and productor_facturador:
-                mapped, _ = PersonaFactura.objects.get_or_create(
+                mapped, created = PersonaFactura.objects.get_or_create(
                     rfc=(productor_facturador.rfc or "").strip().upper(),
                     defaults={
                         "nombre": productor_facturador.nombre,
@@ -640,8 +666,30 @@ class CompraSolicitarFacturaForm(BootstrapFormMixin, forms.ModelForm):
                         "activo": True,
                     },
                 )
+                # Keep single registry by RFC updated from productor catalog when reusing existing row.
+                if not created:
+                    changed = False
+                    if mapped.nombre != productor_facturador.nombre:
+                        mapped.nombre = productor_facturador.nombre
+                        changed = True
+                    if (mapped.regimen_fiscal_codigo or "") != (productor_facturador.regimen_fiscal_codigo or ""):
+                        mapped.regimen_fiscal_codigo = productor_facturador.regimen_fiscal_codigo
+                        mapped.regimen_fiscal = productor_facturador.regimen_fiscal
+                        changed = True
+                    if not mapped.contador and productor_facturador.contador_id:
+                        mapped.contador = productor_facturador.contador
+                        changed = True
+                    if changed:
+                        mapped.save()
+
+                _sync_facturador_cuentas_from_productor(productor_facturador, mapped)
                 facturador = mapped
                 cleaned["facturador"] = mapped
+
+            # If both selectors point to same RFC/entity, ensure payment accounts are unified.
+            if facturador and productor_facturador:
+                if ((facturador.rfc or "").strip().upper() == (productor_facturador.rfc or "").strip().upper()):
+                    _sync_facturador_cuentas_from_productor(productor_facturador, facturador)
 
             if facturador and facturador.contador:
                 cleaned["contador"] = facturador.contador.nombre
@@ -703,6 +751,22 @@ class PersonaFacturaQuickForm(BootstrapFormMixin, forms.ModelForm):
         code = self.cleaned_data.get("regimen_fiscal_codigo", "") or ""
         obj.regimen_fiscal_codigo = code
         obj.regimen_fiscal = SAT_REGIMENES_MAP.get(code, code)
+
+        # Guardrail: avoid duplicate PersonaFactura rows for same RFC.
+        rfc = (obj.rfc or "").strip().upper()
+        if not self.instance.pk and rfc:
+            existing = PersonaFactura.objects.filter(rfc=rfc).first()
+            if existing:
+                existing.nombre = obj.nombre
+                existing.regimen_fiscal_codigo = obj.regimen_fiscal_codigo
+                existing.regimen_fiscal = obj.regimen_fiscal
+                existing.contador = obj.contador
+                existing.resico_policy = obj.resico_policy
+                existing.activo = obj.activo
+                if commit:
+                    existing.save()
+                return existing
+
         if commit:
             obj.save()
         return obj
