@@ -354,7 +354,8 @@ class HomeView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         anticipos_stats = Anticipo.objects.aggregate(total=Sum("monto_anticipo"), conteo=Count("id"))
-        compras_stats = Compra.objects.filter(cancelada=False).aggregate(total=Sum("compra_en_libras"), conteo=Count("id"))
+        # Total de compras: solo bases (no divisiones) para evitar doble conteo.
+        compras_stats = Compra.objects.filter(cancelada=False, parent_compra__isnull=True).aggregate(total=Sum("compra_en_libras"), conteo=Count("id"))
         context["productores_activos"] = Productor.objects.filter(activo=True).count()
         context["anticipos_total"] = anticipos_stats["total"] or 0
         context["anticipos_count"] = anticipos_stats["conteo"] or 0
