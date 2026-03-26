@@ -3,7 +3,6 @@ from django.contrib import messages
 from django.contrib.auth import authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.mail import send_mail, EmailMultiAlternatives
 from django.core.files.base import ContentFile
 from django.core.paginator import Paginator
 from django.db.models.deletion import ProtectedError
@@ -1227,7 +1226,10 @@ def compra_flujo_view(request, compra_id):
             subject = payload["subject"]
             body = payload["body"]
             try:
-                provider = "gmail_oauth" if gmail_ready() else "smtp"
+                provider = "gmail_oauth"
+                if not gmail_ready():
+                    raise RuntimeError("Gmail OAuth no está listo. Reautoriza OAuth antes de enviar solicitud.")
+
                 provider_msg_id = ""
                 html_body = render_invoice_email_html(body)
                 prefer_mxn = (compra.expected_moneda or "").strip().upper() == "MXN"
@@ -1241,16 +1243,7 @@ def compra_flujo_view(request, compra_id):
                         messages.error(request, "Para solicitud en MXN debes adjuntar un PDF de compra en pesos marcado como MXN.")
                         return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
                 attachments = [compra_pdf_att] if compra_pdf_att else []
-                if provider == "gmail_oauth":
-                    provider_msg_id = send_gmail(to_email, subject, body, html_body=html_body, attachments=attachments)
-                else:
-                    msg = EmailMultiAlternatives(subject, body, settings.DEFAULT_FROM_EMAIL, recipients)
-                    if html_body:
-                        msg.attach_alternative(html_body, "text/html")
-                    for att in attachments:
-                        if att:
-                            msg.attach(att[0], att[1], att[2])
-                    msg.send(fail_silently=False)
+                provider_msg_id = send_gmail(to_email, subject, body, html_body=html_body, attachments=attachments)
 
                 EmailOutboxLog.objects.create(
                     compra=compra,
@@ -1305,7 +1298,7 @@ def compra_flujo_view(request, compra_id):
                     subject=subject,
                     body=body,
                     template_code=payload.get("template_code", ""),
-                    provider="gmail_oauth" if gmail_ready() else "smtp",
+                    provider="gmail_oauth",
                     status="ERROR",
                     error=str(e),
                 )
@@ -1564,7 +1557,10 @@ def compra_flujo_view(request, compra_id):
             subject = f"[TEST] {payload['subject']}"
             body = payload["body"]
             try:
-                provider = "gmail_oauth" if gmail_ready() else "smtp"
+                provider = "gmail_oauth"
+                if not gmail_ready():
+                    raise RuntimeError("Gmail OAuth no está listo. Reautoriza OAuth antes de enviar solicitud TEST.")
+
                 provider_msg_id = ""
                 html_body = render_invoice_email_html(body)
                 prefer_mxn = (compra.expected_moneda or "").strip().upper() == "MXN"
@@ -1578,16 +1574,7 @@ def compra_flujo_view(request, compra_id):
                         messages.error(request, "Para solicitud TEST en MXN debes adjuntar un PDF de compra en pesos marcado como MXN.")
                         return redirect(f"/compras/{compra.id}/flujo/?step=solicitar_factura")
                 attachments = [compra_pdf_att] if compra_pdf_att else []
-                if provider == "gmail_oauth":
-                    provider_msg_id = send_gmail(to_email, subject, body, html_body=html_body, attachments=attachments)
-                else:
-                    msg = EmailMultiAlternatives(subject, body, settings.DEFAULT_FROM_EMAIL, [to_email])
-                    if html_body:
-                        msg.attach_alternative(html_body, "text/html")
-                    for att in attachments:
-                        if att:
-                            msg.attach(att[0], att[1], att[2])
-                    msg.send(fail_silently=False)
+                provider_msg_id = send_gmail(to_email, subject, body, html_body=html_body, attachments=attachments)
                 EmailOutboxLog.objects.create(
                     compra=compra,
                     to_email=to_email,
@@ -1635,7 +1622,7 @@ def compra_flujo_view(request, compra_id):
                     subject=subject,
                     body=body,
                     template_code=payload.get("template_code", ""),
-                    provider="gmail_oauth" if gmail_ready() else "smtp",
+                    provider="gmail_oauth",
                     status="ERROR",
                     error=str(e),
                 )
