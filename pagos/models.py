@@ -397,6 +397,10 @@ class Compra(TimestampedModel):
     compra_pdf_validada_at = models.DateTimeField(null=True, blank=True)
     solicitud_factura_enviada = models.BooleanField(default=False)
     fecha_solicitud_factura = models.DateField(null=True, blank=True)
+    invoice_override_authorized = models.BooleanField(default=False)
+    invoice_override_reason = models.TextField(blank=True, default="")
+    invoice_override_by = models.CharField(max_length=120, blank=True, default="")
+    invoice_override_at = models.DateTimeField(null=True, blank=True)
     anticipos_revisados = models.BooleanField(default=False)
     deudas_revisadas = models.BooleanField(default=False)
     division_revisada = models.BooleanField(default=False)
@@ -640,6 +644,11 @@ class Compra(TimestampedModel):
             and self.pago is not None
             and self.estatus_de_pago == EstadoPagoChoices.PAGADO
         )
+
+    @property
+    def invoice_valid_or_override(self):
+        latest = self.invoice_validations.first()
+        return bool((latest and latest.valid) or self.invoice_override_authorized)
 
     @property
     def flujo_codigo(self):

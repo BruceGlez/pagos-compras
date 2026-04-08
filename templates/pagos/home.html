@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load pagos_extras %}
+{% load pagos_extras humanize %}
 {% block title %}Dashboard | Pagos Algodon{% endblock %}
 {% block content %}
 <div class="row g-3 mb-4">
@@ -45,7 +45,7 @@
 </div>
 
 <div class="row g-3 mb-4">
-    <div class="col-md-6">
+    <div class="col-md-4">
         <div class="card card-metric border-warning-subtle">
             <div class="card-body">
                 <p class="metric-label">Monto total pendiente de pago</p>
@@ -54,12 +54,21 @@
             </div>
         </div>
     </div>
-    <div class="col-md-6">
+    <div class="col-md-4">
         <div class="card card-metric border-info-subtle">
             <div class="card-body">
                 <p class="metric-label">Compras pendientes de pago</p>
                 <h4 class="mb-0">{{ pending_count }}</h4>
                 <small>Excluye bases contenedoras</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card card-metric border-success-subtle">
+            <div class="card-body">
+                <p class="metric-label">Total de pacas</p>
+                <h4 class="mb-0">{{ pacas_total|floatformat:2|intcomma }}</h4>
+                <small>Solo compras base</small>
             </div>
         </div>
     </div>

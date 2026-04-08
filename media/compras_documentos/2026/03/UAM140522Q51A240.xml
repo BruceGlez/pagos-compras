@@ -1,0 +1,64 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<cfdi:Comprobante xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" Version="4.0" Serie="A" Folio="240" Sello="NuAMj9zw1AZrCRqn9O5yc5zfB/OVWQawNO50AhJ/ocJKh+NRtsFm4UolVnJV9VbPJxPSBXmkK2jDW3o2VyijMtxN18FMmrV/2gzRkj7JIgYuGEEBMHiT6BYSY2hfcjEjUB404z5FDQOhB0Rl05W40dbjpJIjCeR30Txq8VhnPSZfLuIh7xdH9eMZPlwCXaT8MH6KbCqo42ceyOqoFlsTXxXWmDhcDy7N1MVeD0BHPuvgfHG/8+Lyh4G6tzbxX7bUUhiWuX/nSfJJyUCQ6Se0mEBzTPxigbhV/ATxnaIb/pE19ANiLzDxyd34nb9t+GdU2dFk2sSN9YsvrdsGhSC0mA==" FormaPago="03" NoCertificado="00001000000704180611" Certificado="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" CondicionesDePago="No aplica" SubTotal="70062.35" Descuento="7.65" Moneda="USD" TipoCambio="17.795700" Total="70054.70" TipoDeComprobante="I" Exportacion="01" MetodoPago="PUE" LugarExpedicion="31610" xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd" Fecha="2026-03-27T14:30:10" xmlns:cfdi="http://www.sat.gob.mx/cfd/4">
+  <cfdi:Emisor Rfc="PELG890606TF0" Nombre="GUSTAVO PETERS LOEWEN" RegimenFiscal="612" />
+  <cfdi:Receptor Rfc="UAM140522Q51" Nombre="UNION ALGODONERA MOCTEZUMA" DomicilioFiscalReceptor="32840" RegimenFiscalReceptor="601" UsoCFDI="G01" />
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="11121802" NoIdentificacion="0016" Cantidad="30376.14" ClaveUnidad="DTN" Unidad="Decitonelada métrica" Descripcion="Algodón Clase SM 62 Pacas 13,778 Kgs" ValorUnitario="0.635000" Importe="19288.85" Descuento="2.11" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="19286.742557" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="11121802" NoIdentificacion="0016" Cantidad="14360.45" ClaveUnidad="DTN" Unidad="Decitonelada métrica" Descripcion="Algodón Clase MP 29 Pacas 6,514 Kgs" ValorUnitario="0.625000" Importe="8975.28" Descuento="0.98" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="8974.301149" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="11121802" NoIdentificacion="0016" Cantidad="35316.24" ClaveUnidad="DTN" Unidad="Decitonelada métrica" Descripcion="Algodón Clase M 71 Pacas 16,019 Kgs" ValorUnitario="0.615000" Importe="21719.49" Descuento="2.37" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="21717.115831" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="11121802" NoIdentificacion="0016" Cantidad="16484.82" ClaveUnidad="DTN" Unidad="Decitonelada métrica" Descripcion="Algodón Clase SLMP 32 Pacas 7,477 Kgs" ValorUnitario="0.595000" Importe="9808.47" Descuento="1.07" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="9807.396815" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="11121802" NoIdentificacion="0016" Cantidad="14514.33" ClaveUnidad="DTN" Unidad="Decitonelada métrica" Descripcion="Algodón Clase SLM 28 Pacas 6,584 Kgs" ValorUnitario="0.575000" Importe="8345.74" Descuento="0.91" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="8344.828395" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="11121802" NoIdentificacion="0016" Cantidad="1045.87" ClaveUnidad="DTN" Unidad="Decitonelada métrica" Descripcion="Algodón Clase LMP 2 Pacas 474 Kgs" ValorUnitario="0.545000" Importe="570.00" Descuento="0.06" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="569.936906" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="11121802" NoIdentificacion="0016" Cantidad="2630.13" ClaveUnidad="DTN" Unidad="Decitonelada métrica" Descripcion="Algodón Clase LM 5 Pacas 1,193 Kgs" ValorUnitario="0.515000" Importe="1354.52" Descuento="0.15" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="1354.369036" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+  </cfdi:Conceptos>
+  <cfdi:Impuestos TotalImpuestosTrasladados="0.00">
+    <cfdi:Traslados>
+      <cfdi:Traslado Base="70054.69" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00" />
+    </cfdi:Traslados>
+  </cfdi:Impuestos>
+  <cfdi:Complemento>
+    <tfd:TimbreFiscalDigital xsi:schemaLocation="http://www.sat.gob.mx/TimbreFiscalDigital http://www.sat.gob.mx/sitio_internet/cfd/TimbreFiscalDigital/TimbreFiscalDigitalv11.xsd" Version="1.1" UUID="593f1ac4-d39e-4005-bf48-b29983c44dc0" FechaTimbrado="2026-03-27T15:30:11" RfcProvCertif="LSO1306189R5" SelloCFD="NuAMj9zw1AZrCRqn9O5yc5zfB/OVWQawNO50AhJ/ocJKh+NRtsFm4UolVnJV9VbPJxPSBXmkK2jDW3o2VyijMtxN18FMmrV/2gzRkj7JIgYuGEEBMHiT6BYSY2hfcjEjUB404z5FDQOhB0Rl05W40dbjpJIjCeR30Txq8VhnPSZfLuIh7xdH9eMZPlwCXaT8MH6KbCqo42ceyOqoFlsTXxXWmDhcDy7N1MVeD0BHPuvgfHG/8+Lyh4G6tzbxX7bUUhiWuX/nSfJJyUCQ6Se0mEBzTPxigbhV/ATxnaIb/pE19ANiLzDxyd34nb9t+GdU2dFk2sSN9YsvrdsGhSC0mA==" NoCertificadoSAT="00001000000719545303" SelloSAT="TgLN5e64ZCNPdNOl0gTpZJ1ti++KJWv0XTvqTISUHCoc7uiDc45Ahv/Xo3b2frcKyJLDEMaMhQRROuMBOMJtrzBrifG6ZN7nnJFs2kqAZEd4hY4O33Po7gZDIAjXiR/HEQga5DzpLWrwmXZj1PRDRT94gbQ57bxvihgs+ZQnOKRE48fAQvhoRE7BH+MMAdnLfrgkJOyhsh6I6EzkLwFPQ/PkYcfXkh2codsUff2o7ap90GHME6Ap8D3t2ingMcNGVlSTc3BucLh/Wb3ZS+EVYDmSNwg9vFZt7/BrVGqOOQXEuTu7xZfqAYlgAtknZYXOgwp0PP91WJopzV3rQ7EBIQ==" xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" />
+  </cfdi:Complemento>
+</cfdi:Comprobante>

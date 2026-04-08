@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<cfdi:Comprobante xsi:schemaLocation="http://www.sat.gob.mx/cfd/4 http://www.sat.gob.mx/sitio_internet/cfd/4/cfdv40.xsd" Version="4.0" Fecha="2026-03-26T12:24:40" Sello="CmChjFI0Kc7raltwzC/ebMfm6jFJR47yKzPHjPxJP6Zl6WHqN5uq7Ffwf5yufksnkOrP5d4rZCDN+nOlWCkF+S1zV5rwa0/RSHdv0LbEbp4ZOKLBtd799RHrEUN5RNQpAbRq/AnUDr3zYFDQfoo/nviJPuAxLaHkUhS1IcyqIWrzg8dgyEse10ZbLlmCr5lPQsYC61sexrKrmnGjEVz/3T+T8LfxE0RZbcwaGe2wz+vcPnx2QsYj6CT5tHdF/aQGkz9I6RmWrxBvbkwqFAYfjmvYXI6JneT0E+TbUoR3smBo0S2axfg8IczIdwyte1X+uJcjLA0/pVNocX8Kw+u1ZA==" FormaPago="03" NoCertificado="00001000000701703774" Certificado="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" SubTotal="216900.11" Descuento="3327.09" Moneda="MXN" Total="213573.02" TipoDeComprobante="I" Exportacion="01" MetodoPago="PUE" LugarExpedicion="31614" xmlns:cfdi="http://www.sat.gob.mx/cfd/4" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <cfdi:Emisor Rfc="NEBA890516558" Nombre="ANTONIO NEUFELD BANMAN" RegimenFiscal="612" />
+  <cfdi:Receptor Rfc="UAM140522Q51" Nombre="UNION ALGODONERA MOCTEZUMA" DomicilioFiscalReceptor="32840" RegimenFiscalReceptor="601" UsoCFDI="G01" />
+  <cfdi:Conceptos>
+    <cfdi:Concepto ClaveProdServ="11151507" Cantidad="10382.1718" ClaveUnidad="LBR" Unidad="Libra" Descripcion="VENTA DE ALGODON CAT. 1 CLASE SM CANTIDAD 21.15 PACAS KILOS 4709.28" ValorUnitario="11.0182" Importe="114392.845327" Descuento="0" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="114392.845327" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="11151507" Cantidad="3089.3726" ClaveUnidad="LBR" Unidad="Libra" Descripcion="VENTA DE ALGODON CAT 2 CLASE MP CANTIDAD 6.24 PACAS KILOS 1401.32" ValorUnitario="10.8402" Importe="33489.416859" Descuento="0" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="33489.416859" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="11151507" Cantidad="2310.1985" ClaveUnidad="LBR" Unidad="Libra" Descripcion="VENTA DE ALGODON CAT 3 CLASE M CANT. 4.61 PACAS KILOS 1047.89" ValorUnitario="10.6622" Importe="24631.798447" Descuento="0" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="24631.798447" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="11151507" Cantidad="2280.5431" ClaveUnidad="LBR" Unidad="Libra" Descripcion="VENTA DE ALGODON CAT. 4 CLASE SLMP 4.47 PACAS KILOS 1034.44" ValorUnitario="10.3062" Importe="23503.733297" Descuento="0" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="23503.733297" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="11151507" Cantidad="1782.0797" ClaveUnidad="LBR" Unidad="Libra" Descripcion="VENTA DE ALGODON CAT. 5 CLASE SLM CANTIDAD 3.53 PACAS KILOS 808.34" ValorUnitario="9.9502" Importe="17732.049431" Descuento="3327.09" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="14404.959431" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="11151507" Cantidad="142.1192" ClaveUnidad="LBR" Unidad="Libra" Descripcion="VENTA DE ALGODON CAT. 6 CLASE LMP CANTIDAD .27 PACAS KILOS 64.46" ValorUnitario="9.4162" Importe="1338.222811" Descuento="0" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="1338.222811" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="11151507" Cantidad="138.2328" ClaveUnidad="LBR" Unidad="Libra" Descripcion="VENTA DE ALGODON CAT. 7 CLASE LM CANTIDAD .27 PACAS KILOS 62.7" ValorUnitario="8.8822" Importe="1227.811376" Descuento="0" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="1227.811376" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+    <cfdi:Concepto ClaveProdServ="11151507" Cantidad="71.5080" ClaveUnidad="LBR" Unidad="Libra" Descripcion="VENTA DE ALGODON CAT. 8 CLASE SGO CANTIDAD .14 PACAS KILOS 32.44" ValorUnitario="8.1702" Importe="584.234662" Descuento="0" ObjetoImp="02">
+      <cfdi:Impuestos>
+        <cfdi:Traslados>
+          <cfdi:Traslado Base="584.234662" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.000000" />
+        </cfdi:Traslados>
+      </cfdi:Impuestos>
+    </cfdi:Concepto>
+  </cfdi:Conceptos>
+  <cfdi:Impuestos TotalImpuestosTrasladados="0.00">
+    <cfdi:Traslados>
+      <cfdi:Traslado Base="213573.02" Impuesto="002" TipoFactor="Tasa" TasaOCuota="0.000000" Importe="0.00" />
+    </cfdi:Traslados>
+  </cfdi:Impuestos>
+  <cfdi:Complemento>
+    <tfd:TimbreFiscalDigital xmlns:tfd="http://www.sat.gob.mx/TimbreFiscalDigital" xsi:schemaLocation="http://www.sat.gob.mx/TimbreFiscalDigital http://www.sat.gob.mx/sitio_internet/cfd/TimbreFiscalDigital/TimbreFiscalDigitalv11.xsd" Version="1.1" UUID="B94823C9-D940-43F7-82E7-37701665B961" FechaTimbrado="2026-03-26T12:25:56" RfcProvCertif="SAT970701NN3" SelloCFD="CmChjFI0Kc7raltwzC/ebMfm6jFJR47yKzPHjPxJP6Zl6WHqN5uq7Ffwf5yufksnkOrP5d4rZCDN+nOlWCkF+S1zV5rwa0/RSHdv0LbEbp4ZOKLBtd799RHrEUN5RNQpAbRq/AnUDr3zYFDQfoo/nviJPuAxLaHkUhS1IcyqIWrzg8dgyEse10ZbLlmCr5lPQsYC61sexrKrmnGjEVz/3T+T8LfxE0RZbcwaGe2wz+vcPnx2QsYj6CT5tHdF/aQGkz9I6RmWrxBvbkwqFAYfjmvYXI6JneT0E+TbUoR3smBo0S2axfg8IczIdwyte1X+uJcjLA0/pVNocX8Kw+u1ZA==" NoCertificadoSAT="00001000000705250068" SelloSAT="OmrBw0d+IMax13i9kG/lZkyjdyQlw8THS9qErGtAG6qD/AyDQKvvgIZN7cxUNwCurHtgmRHUjty1wRTs4HwqkIYVaMcrzAsCwmoxHL8/8Rggg2THC5cT30mNiRv0RWaIRdrbsNm3vKhQDOpXWAC0/PRV0V1GDTGrTjd1zNoqs3RWifVTaD9qB3n2qIHGFfHi3R36TIEWv5ftJ9V4WQa9siqoQ+3934jV3ziUwLuVMgdUmZbaX4SOApVtwtFyttNuwRgl3CKaAuxzW4js4fGuQsKfBBNw0FoGNjnsmmGyQraYSIUO3VH1tcstb7XHX/ZKM0Lw+kRG/8Mc7STwatm40A==" />
+  </cfdi:Complemento>
+</cfdi:Comprobante>

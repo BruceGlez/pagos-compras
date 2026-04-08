@@ -23,6 +23,14 @@
       <div class="alert alert-warning py-2">Aún no hay validaciones de XML registradas.</div>
     {% endif %}
 
+    {% if compra.invoice_override_authorized %}
+    <div class="alert alert-warning py-2">
+      <strong>⚠ Excepción autorizada</strong>
+      <div class="small">{{ compra.invoice_override_reason }}</div>
+      <div class="small text-muted">Autorizó: {{ compra.invoice_override_by|default:'-' }} · {{ compra.invoice_override_at|default:'-' }}</div>
+    </div>
+    {% endif %}
+
     {% if ultima %}
     <div class="row g-2 mb-3">
       <div class="col-md-3">
@@ -181,6 +189,21 @@
       <strong>Sugerencia para contador:</strong>
       Ajustar CFDI conforme a los campos en rojo (RFC receptor, moneda, forma/método de pago, uso CFDI, IVA y regla RESICO) y reenviar XML timbrado.
     </div>
+
+    {% if not compra.invoice_override_authorized %}
+    <div class="card border-warning mb-3">
+      <div class="card-body">
+        <h6 class="mb-2">Autorizar excepción manual</h6>
+        <p class="small text-muted mb-2">Usa esta opción solo si la diferencia está autorizada por operación/contabilidad.</p>
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="authorize_override" />
+          <textarea class="form-control mb-2" name="override_reason" rows="2" placeholder="Justificación obligatoria..."></textarea>
+          <button class="btn btn-sm btn-warning" type="submit">Autorizar excepción y continuar</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
     {% endif %}
     {% endif %}
 

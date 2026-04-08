@@ -354,12 +354,15 @@ class HomeView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         anticipos_stats = Anticipo.objects.aggregate(total=Sum("monto_anticipo"), conteo=Count("id"))
         # Total de compras: solo bases (no divisiones) para evitar doble conteo.
-        compras_stats = Compra.objects.filter(cancelada=False, parent_compra__isnull=True).aggregate(total=Sum("compra_en_libras"), conteo=Count("id"))
+        compras_base_qs = Compra.objects.filter(cancelada=False, parent_compra__isnull=True)
+        compras_stats = compras_base_qs.aggregate(total=Sum("compra_en_libras"), conteo=Count("id"))
+        pacas_stats = compras_base_qs.aggregate(total=Sum("pacas"))
         context["productores_activos"] = Productor.objects.filter(activo=True).count()
         context["anticipos_total"] = anticipos_stats["total"] or 0
         context["anticipos_count"] = anticipos_stats["conteo"] or 0
         context["compras_total_libras"] = compras_stats["total"] or 0
         context["compras_count"] = compras_stats["conteo"] or 0
+        context["pacas_total"] = pacas_stats["total"] or 0
         context["tc_ultimo"] = TipoCambio.objects.order_by("-fecha").first()
 
         pending_compras = self._actionable_pending()
@@ -524,6 +527,14 @@ def readiness_queue_view(request):
 
     def _queue_state(c: Compra):
         ws = c.workflow_state
+        if c.invoice_override_authorized and ws in {
+            WorkflowStateChoices.WAITING_INVOICE,
+            WorkflowStateChoices.INVOICE_BLOCKED,
+            WorkflowStateChoices.INVOICE_VALID,
+            WorkflowStateChoices.WAITING_BANK_CONFIRMATION,
+            WorkflowStateChoices.READY_TO_PAY,
+        }:
+            return "EXCEPCION_AUTORIZADA"
         if ws == WorkflowStateChoices.WAITING_INVOICE:
             return "SOLICITUD_ENVIADA" if c.solicitud_factura_enviada else "SOLICITUD_PENDIENTE"
         if ws in {WorkflowStateChoices.INVOICE_BLOCKED, WorkflowStateChoices.INVOICE_VALID}:
@@ -539,7 +550,7 @@ def readiness_queue_view(request):
     base_q = Compra.objects.select_related("productor", "parent_compra").filter(cancelada=False).order_by("fecha_liq", "id")
     visible_all = [c for c in list(base_q[:500]) if not c.base_pipeline_bloqueado_por_divisiones]
 
-    default_states = {"SOLICITUD_PENDIENTE", "SOLICITUD_ENVIADA", "WAITING_BANK_CONFIRMATION", "READY_TO_PAY", "PAID"}
+    default_states = {"SOLICITUD_PENDIENTE", "SOLICITUD_ENVIADA", "EXCEPCION_AUTORIZADA", "WAITING_BANK_CONFIRMATION", "READY_TO_PAY", "PAID"}
     if state:
         queue_items = [c for c in visible_all if _queue_state(c) == state]
     else:
@@ -548,6 +559,7 @@ def readiness_queue_view(request):
     counts = {
         "SOLICITUD_PENDIENTE": sum(1 for c in visible_all if _queue_state(c) == "SOLICITUD_PENDIENTE"),
         "SOLICITUD_ENVIADA": sum(1 for c in visible_all if _queue_state(c) == "SOLICITUD_ENVIADA"),
+        "EXCEPCION_AUTORIZADA": sum(1 for c in visible_all if _queue_state(c) == "EXCEPCION_AUTORIZADA"),
         "WAITING_BANK_CONFIRMATION": sum(1 for c in visible_all if _queue_state(c) == "WAITING_BANK_CONFIRMATION"),
         "READY_TO_PAY": sum(1 for c in visible_all if _queue_state(c) == "READY_TO_PAY"),
         "PAID": sum(1 for c in visible_all if _queue_state(c) == "PAID"),
@@ -561,6 +573,8 @@ def readiness_queue_view(request):
             score += Decimal("100")
         elif qstate == "WAITING_BANK_CONFIRMATION":
             score += Decimal("70")
+        elif qstate == "EXCEPCION_AUTORIZADA":
+            score += Decimal("55")
         elif qstate == "SOLICITUD_ENVIADA":
             score += Decimal("40")
         elif qstate == "SOLICITUD_PENDIENTE":
@@ -1804,7 +1818,7 @@ def compra_flujo_view(request, compra_id):
                 if not compra.bank_account_confirmed:
                     messages.error(request, "No se puede registrar pago: falta confirmación bancaria.")
                     return redirect(f"/compras/{compra.id}/flujo/?step=pago")
-                if not latest_validation or not latest_validation.valid:
+                if not compra.invoice_valid_or_override:
                     messages.error(request, "No se puede registrar pago: la factura no está validada.")
                     return redirect(f"/compras/{compra.id}/flujo/?step=pago")
 
@@ -2304,6 +2318,45 @@ def compra_validacion_factura_view(request, compra_id):
         if not _can_write(request.user):
             messages.error(request, "No tienes permisos de edición.")
             return redirect(f"/compras/{compra.id}/validacion-factura/")
+
+        action = (request.POST.get("action") or "revalidate").strip().lower()
+        if action == "authorize_override":
+            reason = (request.POST.get("override_reason") or "").strip()
+            if not reason:
+                messages.error(request, "Debes capturar la justificación para autorizar excepción.")
+                return redirect(f"/compras/{compra.id}/validacion-factura/")
+
+            actor = str(getattr(request.user, "username", "operador") or "operador")
+            latest = compra.invoice_validations.first()
+            compra.invoice_override_authorized = True
+            compra.invoice_override_reason = reason
+            compra.invoice_override_by = actor
+            compra.invoice_override_at = timezone.now()
+            if not compra.uuid_factura and latest and latest.uuid:
+                compra.uuid_factura = latest.uuid
+            compra.save(update_fields=[
+                "invoice_override_authorized",
+                "invoice_override_reason",
+                "invoice_override_by",
+                "invoice_override_at",
+                "uuid_factura",
+                "updated_at",
+            ])
+
+            target_state = (
+                WorkflowStateChoices.READY_TO_PAY
+                if compra.bank_account_confirmed
+                else WorkflowStateChoices.WAITING_BANK_CONFIRMATION
+            )
+            compra.set_workflow_state(
+                target_state,
+                actor=actor,
+                reason=f"Excepción de validación autorizada: {reason[:140]}",
+            )
+
+            messages.success(request, "Excepción autorizada: se permite continuar con esta factura.")
+            return redirect(f"/compras/{compra.id}/validacion-factura/")
+
         xml_doc = compra.documentos.filter(etapa="factura", archivo__iendswith=".xml").order_by("-created_at").first()
         if not xml_doc:
             messages.error(request, "No hay XML de factura para revalidar.")
@@ -2344,6 +2397,17 @@ def compra_validacion_factura_view(request, compra_id):
         actor = str(getattr(request.user, "username", "operador") or "operador")
         if v.valid:
             updates = []
+            if compra.invoice_override_authorized:
+                compra.invoice_override_authorized = False
+                compra.invoice_override_reason = ""
+                compra.invoice_override_by = ""
+                compra.invoice_override_at = None
+                updates.extend([
+                    "invoice_override_authorized",
+                    "invoice_override_reason",
+                    "invoice_override_by",
+                    "invoice_override_at",
+                ])
             if v.uuid and compra.uuid_factura != v.uuid:
                 compra.uuid_factura = v.uuid
                 updates.append("uuid_factura")
@@ -2379,15 +2443,20 @@ def compra_validacion_factura_view(request, compra_id):
             except ValueError:
                 pass
         else:
-            try:
-                transition_compra(
-                    compra,
-                    WorkflowStateChoices.INVOICE_BLOCKED,
-                    actor=actor,
-                    reason=v.blocked_reason or "Revalidación XML fallida",
-                )
-            except ValueError:
-                pass
+            if compra.invoice_override_authorized and v.uuid and not compra.uuid_factura:
+                compra.uuid_factura = v.uuid
+                compra.save(update_fields=["uuid_factura", "updated_at"])
+
+            if not compra.invoice_override_authorized:
+                try:
+                    transition_compra(
+                        compra,
+                        WorkflowStateChoices.INVOICE_BLOCKED,
+                        actor=actor,
+                        reason=v.blocked_reason or "Revalidación XML fallida",
+                    )
+                except ValueError:
+                    pass
 
         messages.success(request, "XML revalidado con reglas actuales.")
         return redirect(f"/compras/{compra.id}/validacion-factura/")
