@@ -30,6 +30,13 @@ def fetch_tipo_cambio(token: str, serie_id: str, start: date, end: date, timeout
         headers={"Bmx-Token": token, "Accept": "application/json"},
         timeout=timeout,
     )
+    if not response.ok:
+        try:
+            error = response.json().get("error", {})
+        except ValueError:
+            error = {}
+        if isinstance(error, dict) and error.get("mensaje"):
+            raise ValueError(f"Banxico HTTP {response.status_code}: {error['mensaje']}")
     response.raise_for_status()
     payload = response.json()
     series = payload.get("bmx", {}).get("series", [])

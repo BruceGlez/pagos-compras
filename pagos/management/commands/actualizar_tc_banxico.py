@@ -2,7 +2,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from pagos.models import TipoCambio
@@ -48,8 +48,7 @@ class Command(BaseCommand):
             try:
                 rows = fetch_tipo_cambio(token, serie_id, start_date, fetch_end_date)
             except Exception as exc:
-                self.stderr.write(self.style.ERROR(f"Error consultando Banxico: {exc}"))
-                return
+                raise CommandError(f"Error consultando Banxico: {exc}") from exc
 
             # SF60653 devuelve "fecha de liquidacion / para pagos".
             # Para "publicacion_dof" se desplaza un dia hacia atras.
